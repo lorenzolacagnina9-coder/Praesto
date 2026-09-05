@@ -8,20 +8,21 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
 :root{
-  --bg:#241610; --bg-panel:#2f1e16; --bg-panel-2:#3a2519;
-  --parchment:#f4ecd8; --parchment-dim:#e7dcc0;
-  --crust:#cf9a4a; --crust-bright:#e3b565;
+  --bg:#faf5ec; --bg-panel:#ffffff; --bg-panel-2:#f2ead9;
+  --paper:#f8f2e2;
+  --parchment:#2a1c12; --parchment-dim:#5c4a38;
+  --crust:#cf9a4a; --crust-bright:#e3b565; --crust-deep:#93641c;
   --tomato:#b8402f; --tomato-bright:#d15b48;
   --basil:#6f9160; --basil-bright:#89ac78;
-  --ink:#241610; --muted:#a99a84; --line:#4a382a; --radius:14px;
+  --ink:#241610; --muted:#8a7360; --line:#e6d9c0; --radius:14px;
 }
 @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
   background:
-    radial-gradient(1200px 600px at 10% -10%, #3a2519 0%, transparent 60%),
-    radial-gradient(1000px 500px at 110% 10%, #33200f 0%, transparent 55%),
+    radial-gradient(1200px 600px at 10% -10%, #f2e6cc 0%, transparent 60%),
+    radial-gradient(1000px 500px at 110% 10%, #f5ead4 0%, transparent 55%),
     var(--bg);
   color:var(--parchment); font-family:'Work Sans', sans-serif; min-height:100vh;
   -webkit-font-smoothing:antialiased;
@@ -72,7 +73,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 .slot .cap{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;}
 .slot.selected{border-color:var(--accent,var(--crust));background:color-mix(in srgb, var(--accent,var(--crust)) 24%, var(--bg-panel-2));transform:scale(1.03);}
 .slot.full{opacity:.35;cursor:not-allowed;}
-.ticket{position:relative;background:var(--parchment);color:var(--ink);border-radius:10px;padding:20px 20px 22px;margin-top:6px;}
+.ticket{position:relative;background:var(--paper);color:var(--ink);border-radius:10px;padding:20px 20px 22px;margin-top:6px;}
 .ticket::before{content:"";position:absolute;top:-6px;left:0;right:0;height:12px;background-image:radial-gradient(circle at 8px 6px, var(--bg) 5px, transparent 5.5px);background-size:16px 12px; background-repeat:repeat-x;}
 .ticket .tline{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px dashed #c9bb9c;}
 .ticket .tline:last-of-type{border-bottom:none;}
@@ -91,7 +92,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 .order-card .oc-actions{display:flex;gap:8px;}
 .empty{text-align:center;padding:40px 16px;color:var(--muted);}
 .empty .big{font-size:34px;margin-bottom:8px;}
-.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--parchment);color:var(--ink);padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;z-index:50;}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;z-index:50;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
 .setup-hero{text-align:center;padding:24px 0 8px;}
 .setup-hero .big-title{font-size:30px;line-height:1.15;margin-bottom:8px;}
@@ -106,7 +107,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 .check-anim{width:70px;height:70px;border-radius:50%;background:var(--basil);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;animation:pop .4s cubic-bezier(.2,1.4,.4,1);}
 @keyframes pop{from{transform:scale(0);} to{transform:scale(1);}}
 .check-anim svg{width:34px;height:34px;}
-.link-box{background:var(--bg-panel-2); border:1px dashed var(--line); border-radius:10px;padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:12.5px;word-break:break-all; color:var(--crust-bright);}
+.link-box{background:var(--bg-panel-2); border:1px dashed var(--line); border-radius:10px;padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:12.5px;word-break:break-all; color:var(--crust-deep);}
 .qr-wrap{text-align:center;margin:16px 0;}
 .qr-wrap img, .qr-wrap canvas{border-radius:10px;background:#fff;}
 .foot-link{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
@@ -152,18 +153,25 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   }
   async function sGet(key){
     try{
-      const res = await fetch(`${DB_URL}/${keyToPath(key)}.json`);
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), 9000);
+      const res = await fetch(`${DB_URL}/${keyToPath(key)}.json`, {signal: controller.signal});
+      clearTimeout(timer);
       if(!res.ok) return null;
       return await res.json();
     } catch(e){ console.error('firebase get failed', e); return null; }
   }
   async function sSet(key, value){
     try{
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), 9000);
       const res = await fetch(`${DB_URL}/${keyToPath(key)}.json`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(value)
+        body: JSON.stringify(value),
+        signal: controller.signal
       });
+      clearTimeout(timer);
       return res.ok;
     } catch(e){ console.error('firebase set failed', e); return false; }
   }
@@ -257,9 +265,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="setup-hero">
-        <div style="background:#fff;border-radius:16px;display:inline-block;padding:14px 24px;margin-bottom:16px;">
-          <img src="${LOGO_HORIZ}" alt="Praesto" style="height:44px;display:block;">
-        </div>
+        <img src="${LOGO_HORIZ}" alt="Praesto" style="height:48px;margin-bottom:16px;">
         <p>Scegli cosa ordinare e a che ora vuoi ritirarlo: il locale vede la richiesta e la conferma solo se può davvero farcela, senza bisogno di chiamare.</p>
       </div>
       <div class="card" style="text-align:center;">
@@ -717,7 +723,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   const PHONE_ICON_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="vertical-align:-2px;" xmlns="http://www.w3.org/2000/svg"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1L6.6 10.8z" fill="currentColor"/></svg>';
 
   function phoneBadge(){
-    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--bg-panel-2);border:1px solid var(--line);color:var(--crust-bright);flex-shrink:0;" title="Ordine preso al telefono">${PHONE_ICON_SVG}</span>`;
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--bg-panel-2);border:1px solid var(--line);color:var(--crust-deep);flex-shrink:0;" title="Ordine preso al telefono">${PHONE_ICON_SVG}</span>`;
   }
 
   function prepCard(o, t, isNext){
@@ -1070,20 +1076,35 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   async function render(){
     const myToken = ++renderToken;
     let el;
-    switch(state.view){
-      case 'boot': case 'loadingTenant': root.innerHTML = '<div class="spinner"></div>'; return;
-      case 'home': el = viewHome(); break;
-      case 'linkInvalid': el = viewLinkInvalid(); break;
-      case 'customerOrder': el = viewCustomerOrder(); break;
-      case 'customerConfirmation': el = viewCustomerConfirmation(); break;
-      case 'customerCheckOrder': el = viewCustomerCheckOrder(); break;
-      case 'ownerLogin': el = viewOwnerLogin(); break;
-      case 'ownerDashboard': root.innerHTML='<div class="spinner"></div>'; el = await viewOwnerDashboard(); break;
-      case 'adminAuth': el = viewAdminAuth(); break;
-      case 'adminPanel': el = viewAdminPanel(); break;
-      case 'adminTenantForm': el = viewAdminTenantForm(); break;
-      case 'adminTenantLink': el = viewAdminTenantLink(); break;
-      default: el = viewHome();
+    try{
+      switch(state.view){
+        case 'boot': case 'loadingTenant': root.innerHTML = '<div class="spinner"></div>'; return;
+        case 'home': el = viewHome(); break;
+        case 'linkInvalid': el = viewLinkInvalid(); break;
+        case 'customerOrder': el = viewCustomerOrder(); break;
+        case 'customerConfirmation': el = viewCustomerConfirmation(); break;
+        case 'customerCheckOrder': el = viewCustomerCheckOrder(); break;
+        case 'ownerLogin': el = viewOwnerLogin(); break;
+        case 'ownerDashboard': root.innerHTML='<div class="spinner"></div>'; el = await viewOwnerDashboard(); break;
+        case 'adminAuth': el = viewAdminAuth(); break;
+        case 'adminPanel': el = viewAdminPanel(); break;
+        case 'adminTenantForm': el = viewAdminTenantForm(); break;
+        case 'adminTenantLink': el = viewAdminTenantLink(); break;
+        default: el = viewHome();
+      }
+    } catch(e){
+      console.error('render failed', e);
+      if(myToken !== renderToken) return;
+      const errWrap = document.createElement('div');
+      errWrap.innerHTML = `<div class="card" style="text-align:center;padding:30px 20px;">
+        <div style="font-size:34px;margin-bottom:10px;">⚠️</div>
+        <h3 style="margin-bottom:8px;">Qualcosa è andato storto</h3>
+        <p class="small-note" style="margin-bottom:16px;">Apri la console del browser (F12) per il dettaglio tecnico, oppure riprova.</p>
+        <button class="btn btn-primary btn-block" id="err-retry">Riprova</button>
+      </div>`;
+      root.innerHTML = ''; root.appendChild(errWrap);
+      errWrap.querySelector('#err-retry').onclick = ()=> setState({view:'home'});
+      return;
     }
     if(myToken !== renderToken) return;
     root.innerHTML = ''; root.appendChild(el);
