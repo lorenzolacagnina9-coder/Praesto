@@ -122,6 +122,11 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 .prep-info b{font-size:14.5px;display:block;}
 .prep-info .items{font-size:12.5px;color:var(--parchment-dim);margin-top:2px;}
 .next-badge{background:var(--accent,var(--crust));color:#1a0f08;font-size:10.5px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:100px;margin-bottom:6px;display:inline-block;}
+.kitchen-card{border:2px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:16px;background:var(--bg-panel-2);display:flex;gap:20px;align-items:center;}
+.kitchen-card.next{border-color:var(--accent,var(--crust));background:color-mix(in srgb, var(--accent,var(--crust)) 14%, var(--bg-panel-2));}
+.kitchen-time{font-family:'Fraunces',serif;font-weight:700;font-size:40px;color:var(--accent,var(--crust));min-width:110px;text-align:center;}
+.kitchen-info b{font-size:24px;display:block;}
+.kitchen-info .items{font-size:17px;color:var(--parchment-dim);margin-top:4px;}
 .tenant-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg-panel-2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:10px;}
 .tenant-row .info b{display:block;font-size:14.5px;}
 .tenant-row .info span{font-size:12px;color:var(--muted);}
@@ -175,6 +180,33 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     toastTimer = setTimeout(()=> el.classList.remove('show'), 2200);
   }
   function uid(prefix){ return (prefix||'') + Math.random().toString(36).slice(2,7).toUpperCase(); }
+
+  // --- Avviso sonoro nuovo ordine ---
+  // Ascolta i cambi di localStorage: se il locale è aperto in un'altra scheda
+  // (es. un cliente che ordina) mentre il pannello gestore è visibile,
+  // suona un piccolo bip e aggiorna la lista.
+  let watchedSlug = null;
+  function beep(){
+    try{
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880; gain.gain.value = 0.15;
+      osc.start(); osc.stop(ctx.currentTime + 0.15);
+    } catch(e){ /* audio non disponibile, ignora */ }
+  }
+  function startOrderWatcher(slug){
+    if(watchedSlug === slug) return;
+    watchedSlug = slug;
+  }
+  window.addEventListener('storage', (e)=>{
+    if(!watchedSlug) return;
+    if(e.key === LS_PREFIX+'orders:'+watchedSlug){
+      beep();
+      if(state.view==='ownerDashboard' && (state.ownerTab||'ordini')==='ordini') render();
+    }
+  });
+
   function todayStr(offsetDays){ const d = new Date(); d.setDate(d.getDate() + (offsetDays||0)); return d.toISOString().slice(0,10); }
   function dayLabel(offsetDays){
     if(offsetDays===0) return 'Oggi';
@@ -247,6 +279,12 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const slugs = (await sGet('tenant_index')) || [];
     const list = await Promise.all(slugs.map(s => sGet('tenant:'+s)));
     return list.filter(Boolean);
+  }
+  async function loadSiblingTenants(t){
+    if(!t.groupSlug) return [t];
+    const all = await loadAllTenants();
+    const siblings = all.filter(x=> x.groupSlug === t.groupSlug);
+    return siblings.length ? siblings : [t];
   }
 
   // ---------------- PUBLIC HOME ----------------
@@ -558,32 +596,61 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     wrap.innerHTML = `
       <button class="link-back" id="od-back">&larr; Esci dal pannello</button>
       <div class="brandbar"><div class="mark" style="--m-accent:${t.accent}">${markHTML(t)}</div><div><div class="name">${t.name}</div><div class="tag">Pannello ordini</div></div></div>
+      <div id="site-switcher"></div>
       <div class="tabs">
         <div class="tab ${tab==='ordini'?'active':''}" id="tab-ordini">Ordini</div>
         <div class="tab ${tab==='prep'?'active':''}" id="tab-prep">Preparazione</div>
+        <div class="tab ${tab==='report'?'active':''}" id="tab-report">Report</div>
       </div>
       <div id="tab-content"></div>`;
     setTimeout(()=>{
       wrap.querySelector('#od-back').onclick = ()=> setState({view: state.linkParam ? 'customerOrder' : 'home', activeTenant: state.linkParam ? state.activeTenant : null});
       wrap.querySelector('#tab-ordini').onclick = ()=> setState({ownerTab:'ordini'});
       wrap.querySelector('#tab-prep').onclick = ()=> setState({ownerTab:'prep'});
+      wrap.querySelector('#tab-report').onclick = ()=> setState({ownerTab:'report'});
     },0);
+    if(t.groupSlug){
+      const siblings = await loadSiblingTenants(t);
+      if(siblings.length > 1){
+        const switcher = wrap.querySelector('#site-switcher');
+        switcher.style.cssText = 'margin-bottom:16px;';
+        switcher.innerHTML = `<label style="display:block;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:6px;">Sede</label>
+          <select id="site-select" style="width:100%;background:var(--bg-panel-2);border:1px solid var(--line);color:var(--parchment);border-radius:9px;padding:10px 12px;font-size:15px;">
+            ${siblings.map(s=> `<option value="${s.slug}" ${s.slug===t.slug?'selected':''}>${s.name}</option>`).join('')}
+          </select>`;
+        setTimeout(()=>{
+          switcher.querySelector('#site-select').onchange = (e)=>{
+            const chosen = siblings.find(s=>s.slug===e.target.value);
+            if(chosen) setState({activeTenant:chosen, ownerTab:'ordini'});
+          };
+        },0);
+      }
+    }
+    startOrderWatcher(t.slug);
     const content = wrap.querySelector('#tab-content');
     if(tab === 'prep'){
       content.innerHTML = '<div class="spinner"></div>';
       const orders = await loadOrders(t.slug);
       const todo = orders.filter(o=> o.status==='confirmed');
       todo.sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
-      content.innerHTML = '';
-      const intro = document.createElement('p');
-      intro.className = 'small-note'; intro.style.marginBottom='16px';
-      intro.textContent = 'Ordini confermati, in ordine di ritiro — dal più urgente al più lontano nel tempo.';
-      content.appendChild(intro);
+      content.innerHTML = `<div class="row" style="margin-bottom:14px;">
+        <p class="small-note" style="margin:0;flex:1;">Ordini confermati, in ordine di ritiro — dal più urgente al più lontano nel tempo.</p>
+        <button class="btn btn-ghost btn-sm" id="kitchen-mode-btn" style="flex:0 0 auto;">🖥️ Modalità cucina</button>
+      </div>`;
+      setTimeout(()=>{
+        wrap.querySelector('#kitchen-mode-btn').onclick = ()=> setState({view:'kitchenMode'});
+      },0);
       if(todo.length===0){
         content.innerHTML += `<div class="empty"><div class="big">👨‍🍳</div>Nessun ordine da preparare al momento.</div>`;
       } else {
         todo.forEach((o,i)=> content.appendChild(prepCard(o, t, i===0)));
       }
+    } else if(tab === 'report'){
+      content.innerHTML = '<div class="spinner"></div>';
+      const orders = await loadOrders(t.slug);
+      const siblingsCount = t.groupSlug ? (await loadSiblingTenants(t)).length : 1;
+      content.innerHTML = '';
+      content.appendChild(await reportPanel(t, orders, siblingsCount));
     } else {
       content.innerHTML = `
         <div class="toggle-row">
@@ -713,6 +780,122 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 
   function phoneBadge(){
     return `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--bg-panel-2);border:1px solid var(--line);color:var(--crust-deep);flex-shrink:0;" title="Ordine preso al telefono">${PHONE_ICON_SVG}</span>`;
+  }
+
+  async function reportPanel(t, ownOrders, siblingsCount){
+    const wrap = document.createElement('div');
+    const statsArea = document.createElement('div');
+    wrap.appendChild(statsArea);
+    let currentOrders = ownOrders;
+    let aggregateOn = false;
+
+    if(siblingsCount > 1){
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'toggle-row';
+      toggleRow.innerHTML = `<div><b>Vedi tutte le sedi insieme</b><span>Somma i dati di tutte le sedi del gruppo</span></div>
+        <div class="switch" id="agg-switch"><div class="knob"></div></div>`;
+      wrap.insertBefore(toggleRow, statsArea);
+      toggleRow.querySelector('#agg-switch').onclick = async (e)=>{
+        aggregateOn = !aggregateOn;
+        e.currentTarget.classList.toggle('on', aggregateOn);
+        if(aggregateOn){
+          const siblings = await loadSiblingTenants(t);
+          const all = await Promise.all(siblings.map(s=>loadOrders(s.slug)));
+          currentOrders = all.flat();
+        } else {
+          currentOrders = ownOrders;
+        }
+        renderStats();
+      };
+    }
+
+    function renderStats(){
+      statsArea.innerHTML = '';
+      const orders = currentOrders;
+      const today = todayStr(0);
+      const todayOrders = orders.filter(o=> o.date===today && o.status!=='rejected');
+      const phoneCount = todayOrders.filter(o=>o.source==='phone').length;
+      const onlineCount = todayOrders.length - phoneCount;
+      const bySlot = {};
+      todayOrders.forEach(o=>{ bySlot[o.time] = (bySlot[o.time]||0)+1; });
+      let busiest = null;
+      Object.entries(bySlot).forEach(([time,count])=>{ if(!busiest || count>busiest.count) busiest = {time, count}; });
+
+      const last7 = []; for(let i=0;i<7;i++) last7.push(todayStr(-i));
+      const prev7 = []; for(let i=7;i<14;i++) prev7.push(todayStr(-i));
+      const thisWeekCount = orders.filter(o=> last7.includes(o.date) && o.status!=='rejected').length;
+      const lastWeekCount = orders.filter(o=> prev7.includes(o.date) && o.status!=='rejected').length;
+      const diff = thisWeekCount - lastWeekCount;
+      const diffText = lastWeekCount===0 ? '' : (diff>=0 ? `+${diff}` : `${diff}`) + ' rispetto alla settimana precedente';
+
+      const card1 = document.createElement('div');
+      card1.className = 'card';
+      card1.innerHTML = `<h3 style="margin-bottom:12px;font-size:15px;">Oggi</h3>
+        <div class="row" style="text-align:center;margin-bottom:6px;">
+          <div><div style="font-size:26px;font-weight:700;color:var(--accent,var(--crust));">${todayOrders.length}</div><div class="small-note" style="margin:0;">ordini totali</div></div>
+          <div><div style="font-size:26px;font-weight:700;color:var(--accent,var(--crust));">${onlineCount}</div><div class="small-note" style="margin:0;">online</div></div>
+          <div><div style="font-size:26px;font-weight:700;color:var(--accent,var(--crust));">${phoneCount}</div><div class="small-note" style="margin:0;">telefonici</div></div>
+        </div>
+        ${busiest ? `<p class="small-note" style="margin-top:14px;">Fascia più richiesta oggi: <b style="color:var(--parchment);">${busiest.time}</b> (${busiest.count} ordini)</p>` : ''}
+        <div class="divider"></div>
+        <h3 style="margin-bottom:8px;font-size:15px;">Questa settimana</h3>
+        <p style="font-size:15px;margin:0;"><b style="font-size:20px;color:var(--accent,var(--crust));">${thisWeekCount}</b> ordini ${diffText ? `<span class="small-note" style="margin:0;">(${diffText})</span>` : ''}</p>
+        <button class="btn btn-ghost btn-block" id="export-csv" style="margin-top:16px;">⬇️ Scarica report (Excel/CSV)</button>`;
+      statsArea.appendChild(card1);
+      statsArea.querySelector('#export-csv').onclick = ()=> exportOrdersCSV(currentOrders, t.name);
+
+      const cfg = t.slots;
+      const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
+      const last14 = []; for(let i=0;i<14;i++) last14.push(todayStr(-i));
+      const stats = {};
+      slots.forEach(time=> stats[time] = {full:0,total:0});
+      last14.forEach(date=>{
+        slots.forEach(time=>{
+          const count = orders.filter(o=> o.date===date && o.time===time && o.status!=='rejected').length;
+          stats[time].total++;
+          if(count >= cfg.capacityPerSlot) stats[time].full++;
+        });
+      });
+      const flagged = Object.entries(stats)
+        .map(([time,s])=> ({time, ratio: s.total ? s.full/s.total : 0, full:s.full, total:s.total}))
+        .filter(s=> s.total>=4 && s.ratio>=0.6)
+        .sort((a,b)=> b.ratio-a.ratio);
+
+      const sugCard = document.createElement('div');
+      sugCard.className = 'card';
+      if(flagged.length===0){
+        sugCard.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">Suggerimento capacità</h3>
+          <p class="small-note">Non ci sono ancora abbastanza dati (servono almeno alcuni giorni di storico) o nessuna fascia è costantemente piena.</p>`;
+      } else {
+        sugCard.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">💡 Suggerimento capacità</h3>
+          <p class="small-note" style="margin-bottom:10px;">Negli ultimi 14 giorni, queste fasce sono risultate piene quasi sempre — potresti valutare di aumentarne la capacità:</p>`;
+        flagged.slice(0,5).forEach(f=>{
+          const line = document.createElement('p');
+          line.style.cssText = 'margin:4px 0;font-size:14px;';
+          line.innerHTML = `<b style="color:var(--accent,var(--crust));">${f.time}</b> — piena ${f.full} giorni su ${f.total} osservati`;
+          sugCard.appendChild(line);
+        });
+      }
+      statsArea.appendChild(sugCard);
+    }
+    renderStats();
+    return wrap;
+  }
+
+  function exportOrdersCSV(orders, tenantName){
+    const headers = ['Data','Ora','Cliente','Telefono','Origine','Stato','Piatti','Totale'];
+    const rows = orders.slice().sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time)).map(o=>{
+      const items = (o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(' | ');
+      const csvEscape = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+      return [o.date, o.time, o.customerName, o.customerPhone, o.source==='phone'?'Telefono':'Online', statusLabel(o.status), items, (o.total||0).toFixed(2)].map(csvEscape).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `report-${tenantName.toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${todayStr(0)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function prepCard(o, t, isNext){
@@ -943,6 +1126,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           <div class="field"><label>Ordini max a fascia</label><input id="d-cap" type="number" min="1" value="${d.slots.capacityPerSlot}"></div>
         </div>
         <div class="field"><label>${isNew ? 'PIN gestore locale' : 'Nuovo PIN (lascia vuoto per non cambiarlo)'}</label><input id="d-pin" placeholder="${isNew ? 'Es. 4821' : '••••'}" maxlength="8"></div>
+        <div class="field"><label>Gruppo multi-sede (facoltativo)</label><input id="d-group" value="${d.groupSlug||''}" placeholder="Es. da-turi-gruppo"><p class="hint">Se questo locale fa parte di una catena, scrivi qui lo stesso identificativo per tutte le sue sedi: il gestore potrà passare dall'una all'altra senza rifare il login.</p></div>
       </div>
       <div class="card">
         <h3 style="margin-bottom:12px;">Menu</h3>
@@ -991,6 +1175,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#d-slotmin').oninput = e => d.slots.slotMinutes = Number(e.target.value);
       wrap.querySelector('#d-cap').oninput = e => d.slots.capacityPerSlot = Number(e.target.value);
       wrap.querySelector('#d-pin').oninput = e => d.pin = e.target.value;
+      wrap.querySelector('#d-group').oninput = e => d.groupSlug = e.target.value.trim();
       wrap.querySelector('#add-item').onclick = ()=>{
         const nameEl = wrap.querySelector('#new-item-name'), descEl = wrap.querySelector('#new-item-desc'), priceEl = wrap.querySelector('#new-item-price');
         const name = nameEl.value.trim(); const desc = descEl.value.trim(); const price = parseFloat(priceEl.value);
@@ -1018,7 +1203,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     if(isNew){
       const slug = d.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + uid('').toLowerCase();
       const pinHash = await sha256(d.pin.trim());
-      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[] };
+      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'' };
       tenants.push(tenant);
       await sSet('tenant:'+slug, tenant);
       await sSet('orders:'+slug, []);
@@ -1031,7 +1216,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       const idx = tenants.findIndex(x=>x.slug===state.adminEditingSlug);
       if(idx===-1) return;
       const existing = tenants[idx];
-      const updated = { ...existing, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[] };
+      const updated = { ...existing, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'' };
       if(d.pin && d.pin.trim()){ updated.pinHash = await sha256(d.pin.trim()); }
       tenants[idx] = updated;
       await sSet('tenant:'+updated.slug, updated);
@@ -1063,6 +1248,46 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     return wrap;
   }
 
+  async function viewKitchenMode(){
+    const t = state.activeTenant;
+    document.documentElement.style.setProperty('--accent', t.accent);
+    const wrap = document.createElement('div');
+    wrap.style.maxWidth = '720px';
+    wrap.innerHTML = `
+      <button class="link-back" id="km-back" style="font-size:16px;">&larr; Esci dalla modalità cucina</button>
+      <h2 style="margin-bottom:16px;">${t.name} — Cucina</h2>
+      <div id="km-content"><div class="spinner"></div></div>`;
+    setTimeout(()=>{ wrap.querySelector('#km-back').onclick = ()=> setState({view:'ownerDashboard', ownerTab:'prep'}); },0);
+    const orders = await loadOrders(t.slug);
+    const todo = orders.filter(o=> o.status==='confirmed');
+    todo.sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
+    const content = wrap.querySelector('#km-content');
+    content.innerHTML = '';
+    if(todo.length===0){
+      content.innerHTML = `<div class="empty"><div class="big" style="font-size:50px;">👨‍🍳</div><span style="font-size:20px;">Nessun ordine da preparare al momento.</span></div>`;
+    } else {
+      todo.forEach((o,i)=>{
+        const itemsText = (o.items||[]).length ? o.items.map(x=>`${x.qty}× ${x.name}`).join(', ') : (o.source==='phone' ? 'Ordine telefonico' : '');
+        const div = document.createElement('div');
+        div.className = 'kitchen-card' + (i===0 ? ' next' : '');
+        div.innerHTML = `
+          <div class="kitchen-time">${o.time}</div>
+          <div class="kitchen-info">
+            ${i===0 ? '<span class="next-badge" style="font-size:13px;padding:4px 12px;">Prossimo</span><br>' : ''}
+            <b>${o.source==='phone' ? phoneBadge()+' ' : ''}${o.customerName}</b>
+            <div class="items">${itemsText}</div>
+          </div>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-confirm'; btn.style.cssText='font-size:16px;padding:14px 20px;flex-shrink:0;';
+        btn.textContent = 'Pronto';
+        btn.onclick = ()=> updateOrderStatus(t.slug, o.id, 'ready');
+        div.appendChild(btn);
+        content.appendChild(div);
+      });
+    }
+    return wrap;
+  }
+
   // ---------------- render dispatcher ----------------
   let renderToken = 0;
   async function render(){
@@ -1078,6 +1303,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         case 'customerCheckOrder': el = viewCustomerCheckOrder(); break;
         case 'ownerLogin': el = viewOwnerLogin(); break;
         case 'ownerDashboard': root.innerHTML='<div class="spinner"></div>'; el = await viewOwnerDashboard(); break;
+        case 'kitchenMode': root.innerHTML='<div class="spinner"></div>'; el = await viewKitchenMode(); break;
         case 'adminAuth': el = viewAdminAuth(); break;
         case 'adminPanel': el = viewAdminPanel(); break;
         case 'adminTenantForm': el = viewAdminTenantForm(); break;
