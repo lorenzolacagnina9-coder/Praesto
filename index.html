@@ -272,6 +272,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     return mins >= (oh*60+om) && mins <= (ch*60+cm);
   }
   function markHTML(t){
+    if(t.logoDataUrl) return `<img src="${t.logoDataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
     if(t.emoji && t.emoji.trim()) return t.emoji;
     return (t.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
   }
@@ -552,6 +553,18 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         declineBtn.onclick = ()=> respondToProposalDirect(t, order, false);
         row.appendChild(acceptBtn); row.appendChild(declineBtn);
         statusEl.appendChild(row);
+      } else if(order.status === 'ready'){
+        statusEl.innerHTML = `<p style="color:var(--basil-bright);font-weight:700;font-size:15.5px;margin-bottom:6px;">🎉 Il tuo ordine è pronto!</p><p style="color:var(--parchment-dim);font-size:14.5px;">Puoi venire a ritirarlo.</p>`;
+        if(hasPlus(t) && t.googleReviewLink){
+          const reviewBox = document.createElement('div');
+          reviewBox.style.cssText = 'margin-top:16px;padding-top:16px;border-top:1px solid var(--line);';
+          reviewBox.innerHTML = `<p style="font-size:13.5px;color:var(--parchment-dim);margin-bottom:10px;">Ti è piaciuto? Un minuto per una recensione ci aiuta molto.</p>`;
+          const reviewBtn = document.createElement('a');
+          reviewBtn.href = t.googleReviewLink; reviewBtn.target = '_blank'; reviewBtn.rel = 'noopener';
+          reviewBtn.className = 'btn btn-primary btn-block'; reviewBtn.textContent = '⭐ Lascia una recensione';
+          reviewBox.appendChild(reviewBtn);
+          statusEl.appendChild(reviewBox);
+        }
       }
     }
     renderLiveStatus(null);
@@ -712,7 +725,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#tab-prep').onclick = ()=> setState({ownerTab:'prep'});
       wrap.querySelector('#tab-report').onclick = ()=> setState({ownerTab:'report'});
     },0);
-    if(t.groupSlug){
+    if(t.groupSlug && hasPlus(t)){
       const siblings = await loadSiblingTenants(t);
       if(siblings.length > 1){
         const switcher = wrap.querySelector('#site-switcher');
@@ -751,7 +764,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     } else if(tab === 'report'){
       content.innerHTML = '<div class="spinner"></div>';
       const orders = await loadOrders(t.slug);
-      const siblingsCount = t.groupSlug ? (await loadSiblingTenants(t)).length : 1;
+      const siblingsCount = (t.groupSlug && hasPlus(t)) ? (await loadSiblingTenants(t)).length : 1;
       content.innerHTML = '';
       content.appendChild(await reportPanel(t, orders, siblingsCount));
     } else {
@@ -936,13 +949,6 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       let busiest = null;
       Object.entries(bySlot).forEach(([time,count])=>{ if(!busiest || count>busiest.count) busiest = {time, count}; });
 
-      const last7 = []; for(let i=0;i<7;i++) last7.push(todayStr(-i));
-      const prev7 = []; for(let i=7;i<14;i++) prev7.push(todayStr(-i));
-      const thisWeekCount = orders.filter(o=> last7.includes(o.date) && o.status!=='rejected').length;
-      const lastWeekCount = orders.filter(o=> prev7.includes(o.date) && o.status!=='rejected').length;
-      const diff = thisWeekCount - lastWeekCount;
-      const diffText = lastWeekCount===0 ? '' : (diff>=0 ? `+${diff}` : `${diff}`) + ' rispetto alla settimana precedente';
-
       const card1 = document.createElement('div');
       card1.className = 'card';
       card1.innerHTML = `<h3 style="margin-bottom:12px;font-size:15px;">Oggi</h3>
@@ -951,13 +957,37 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           <div><div style="font-size:26px;font-weight:700;color:var(--accent,var(--crust));">${onlineCount}</div><div class="small-note" style="margin:0;">online</div></div>
           <div><div style="font-size:26px;font-weight:700;color:var(--accent,var(--crust));">${phoneCount}</div><div class="small-note" style="margin:0;">telefonici</div></div>
         </div>
-        ${busiest ? `<p class="small-note" style="margin-top:14px;">Fascia più richiesta oggi: <b style="color:var(--parchment);">${busiest.time}</b> (${busiest.count} ordini)</p>` : ''}
-        <div class="divider"></div>
-        <h3 style="margin-bottom:8px;font-size:15px;">Questa settimana</h3>
+        ${busiest ? `<p class="small-note" style="margin-top:14px;">Fascia più richiesta oggi: <b style="color:var(--parchment);">${busiest.time}</b> (${busiest.count} ordini)</p>` : ''}`;
+      statsArea.appendChild(card1);
+
+      if(!hasPlus(t)){
+        const upsell = document.createElement('div');
+        upsell.className = 'card';
+        upsell.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">✨ Disponibile con il piano Plus</h3>
+          <p class="small-note" style="margin-bottom:4px;">Con il piano Plus sblocchi:</p>
+          <p class="small-note" style="margin:2px 0;">• Confronto con la settimana precedente</p>
+          <p class="small-note" style="margin:2px 0;">• Suggerimento automatico su quali fasce aumentare la capacità</p>
+          <p class="small-note" style="margin:2px 0;">• Esportazione dati in Excel</p>
+          <p class="small-note" style="margin:2px 0;">• Piatti più venduti</p>
+          <p class="small-note" style="margin:2px 0;">• Gestione di più sedi da un solo accesso</p>`;
+        statsArea.appendChild(upsell);
+        return;
+      }
+
+      const last7 = []; for(let i=0;i<7;i++) last7.push(todayStr(-i));
+      const prev7 = []; for(let i=7;i<14;i++) prev7.push(todayStr(-i));
+      const thisWeekCount = orders.filter(o=> last7.includes(o.date) && o.status!=='rejected').length;
+      const lastWeekCount = orders.filter(o=> prev7.includes(o.date) && o.status!=='rejected').length;
+      const diff = thisWeekCount - lastWeekCount;
+      const diffText = lastWeekCount===0 ? '' : (diff>=0 ? `+${diff}` : `${diff}`) + ' rispetto alla settimana precedente';
+
+      const weekCard = document.createElement('div');
+      weekCard.className = 'card';
+      weekCard.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">Questa settimana</h3>
         <p style="font-size:15px;margin:0;"><b style="font-size:20px;color:var(--accent,var(--crust));">${thisWeekCount}</b> ordini ${diffText ? `<span class="small-note" style="margin:0;">(${diffText})</span>` : ''}</p>
         <button class="btn btn-ghost btn-block" id="export-csv" style="margin-top:16px;">⬇️ Scarica report (Excel/CSV)</button>`;
-      statsArea.appendChild(card1);
-      statsArea.querySelector('#export-csv').onclick = ()=> exportOrdersCSV(currentOrders, t.name);
+      statsArea.appendChild(weekCard);
+      weekCard.querySelector('#export-csv').onclick = ()=> exportOrdersCSV(currentOrders, t.name);
 
       const cfg = t.slots;
       const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
@@ -992,6 +1022,26 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         });
       }
       statsArea.appendChild(sugCard);
+
+      const dishCounts = {};
+      orders.filter(o=>o.status!=='rejected').forEach(o=>{
+        (o.items||[]).forEach(i=>{ dishCounts[i.name] = (dishCounts[i.name]||0) + i.qty; });
+      });
+      const topDishes = Object.entries(dishCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const dishCard = document.createElement('div');
+      dishCard.className = 'card';
+      if(topDishes.length===0){
+        dishCard.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">Piatti più venduti</h3><p class="small-note">Non ci sono ancora abbastanza ordini con dettaglio piatti.</p>`;
+      } else {
+        dishCard.innerHTML = `<h3 style="margin-bottom:10px;font-size:15px;">🍽️ Piatti più venduti</h3>`;
+        topDishes.forEach(([name,qty])=>{
+          const line = document.createElement('div');
+          line.style.cssText = 'display:flex;justify-content:space-between;padding:5px 0;font-size:14px;';
+          line.innerHTML = `<span>${name}</span><b style="color:var(--accent,var(--crust));">${qty}</b>`;
+          dishCard.appendChild(line);
+        });
+      }
+      statsArea.appendChild(dishCard);
     }
     renderStats();
     return wrap;
@@ -1419,6 +1469,11 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       <div class="card">
         <div class="field"><label>Nome del locale</label><input id="d-name" value="${d.name}" placeholder="Es. Pizzeria da Turi"></div>
         <div class="field"><label>Emoji o iniziali (facoltativo)</label><input id="d-emoji" value="${d.emoji||''}" placeholder="Lascia vuoto per usare le iniziali"></div>
+        <div class="field"><label>Logo del locale (facoltativo)</label>
+          <div id="logo-preview" style="margin-bottom:8px;">${d.logoDataUrl ? `<img src="${d.logoDataUrl}" style="height:48px;border-radius:8px;">` : ''}</div>
+          <input type="file" id="d-logo" accept="image/*">
+          <p class="hint">Se caricato, sostituisce le iniziali/emoji ovunque compaia il marchio del locale.</p>
+        </div>
         <div class="field"><label>Colore del brand</label><div class="chip-row" id="chip-row"></div></div>
         <div class="row">
           <div class="field"><label>Apertura</label><input id="d-open" type="time" value="${d.slots.openFrom}"></div>
@@ -1431,13 +1486,25 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div class="field"><label>${isNew ? 'PIN gestore locale' : 'Nuovo PIN (lascia vuoto per non cambiarlo)'}</label><input id="d-pin" placeholder="${isNew ? 'Es. 4821' : '••••'}" maxlength="8"></div>
         <div class="field"><label>Codice del link (facoltativo)</label><input id="d-slug" value="${isNew ? (d.customSlug||'') : d.slug}" placeholder="es. da-turi-catania"><p class="hint">${isNew ? 'Se lo lasci vuoto, lo genero automaticamente dal nome. Usa solo lettere minuscole, numeri e trattini — niente spazi.' : 'Cambiarlo genera un nuovo link: quello vecchio (e i QR già stampati) smetteranno di funzionare.'}</p></div>
         <div class="field"><label>Gruppo multi-sede (facoltativo)</label><input id="d-group" value="${d.groupSlug||''}" placeholder="Es. da-turi-gruppo"><p class="hint">Se questo locale fa parte di una catena, scrivi qui lo stesso identificativo per tutte le sue sedi: il gestore potrà passare dall'una all'altra senza rifare il login.</p></div>
+        <div class="field"><label>Link recensione Google (facoltativo)</label><input id="d-review" value="${d.googleReviewLink||''}" placeholder="https://g.page/r/..."><p class="hint">Attivo solo con il piano Plus: quando l'ordine è pronto, il cliente vede un invito a lasciare una recensione con questo link.</p></div>
+        <div class="field"><label>Piano</label><select id="d-plan">
+            <option value="base" ${(d.plan||'base')==='base' ? 'selected' : ''}>Base</option>
+            <option value="plus" ${d.plan==='plus' ? 'selected' : ''}>Plus</option>
+          </select></div>
+        <div class="field"><label>Plus di prova fino al (facoltativo)</label><input id="d-plustrial" type="date" value="${d.plusTrialUntil||''}"><p class="hint">Durante la prova, il locale ha accesso alle funzioni Plus (multi-sede, report avanzato, esportazione) anche se il piano sopra è impostato su Base. Lascia vuoto per nessuna prova attiva.</p></div>
       </div>
       <div class="card">
         <h3 style="margin-bottom:12px;">Menu</h3>
         <div id="menu-editor"></div>
         <div class="row" style="margin-bottom:8px;">
           <div class="field" style="margin-bottom:0;"><input id="new-item-name" placeholder="Nome piatto"></div>
-          <div class="field" style="margin-bottom:0;"><input id="new-item-cat" list="cat-suggestions" placeholder="Categoria (es. Pizze)"><datalist id="cat-suggestions"></datalist></div>
+          <div class="field" style="margin-bottom:0;">
+            <select id="new-item-cat-select">
+              <option value="">Nessuna categoria</option>
+              <option value="__new__">+ Nuova categoria…</option>
+            </select>
+            <input id="new-item-cat-new" placeholder="Nome nuova categoria" style="display:none;margin-top:8px;">
+          </div>
         </div>
         <div class="row">
           <div class="field" style="margin-bottom:0;"><input id="new-item-desc" placeholder="Descrizione breve (facoltativa)"></div>
@@ -1483,8 +1550,14 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         });
       });
       if(items.length===0){ ed.innerHTML = '<p class="small-note">Nessuna voce ancora.</p>'; }
-      const datalist = wrap.querySelector('#cat-suggestions');
-      if(datalist) datalist.innerHTML = cats.map(c=>`<option value="${c}">`).join('');
+      const catSelect = wrap.querySelector('#new-item-cat-select');
+      if(catSelect){
+        const prevValue = catSelect.value;
+        catSelect.innerHTML = '<option value="">Nessuna categoria</option>'
+          + cats.map(c=>`<option value="${c}">${c}</option>`).join('')
+          + '<option value="__new__">+ Nuova categoria…</option>';
+        if([...catSelect.options].some(o=>o.value===prevValue)) catSelect.value = prevValue;
+      }
     }
     renderMenuEditor();
 
@@ -1498,17 +1571,48 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#d-cap').oninput = e => d.slots.capacityPerSlot = Number(e.target.value);
       wrap.querySelector('#d-pin').oninput = e => d.pin = e.target.value;
       wrap.querySelector('#d-group').oninput = e => d.groupSlug = e.target.value.trim();
+      wrap.querySelector('#d-plan').onchange = e => d.plan = e.target.value;
+      wrap.querySelector('#d-plustrial').oninput = e => d.plusTrialUntil = e.target.value;
+      wrap.querySelector('#d-review').oninput = e => d.googleReviewLink = e.target.value.trim();
+      wrap.querySelector('#d-logo').onchange = (e)=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (ev)=>{
+          img.onload = ()=>{
+            const size = 128;
+            const canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const scale = Math.max(size/img.width, size/img.height);
+            const w = img.width*scale, h = img.height*scale;
+            ctx.drawImage(img, (size-w)/2, (size-h)/2, w, h);
+            d.logoDataUrl = canvas.toDataURL('image/png', 0.85);
+            wrap.querySelector('#logo-preview').innerHTML = `<img src="${d.logoDataUrl}" style="height:48px;border-radius:8px;">`;
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
       wrap.querySelector('#d-slug').oninput = e => { if(isNew) d.customSlug = e.target.value.trim(); else d.newSlug = e.target.value.trim(); };
+      wrap.querySelector('#new-item-cat-select').onchange = (e)=>{
+        const newCatInput = wrap.querySelector('#new-item-cat-new');
+        newCatInput.style.display = e.target.value === '__new__' ? 'block' : 'none';
+        if(e.target.value === '__new__') newCatInput.focus();
+      };
       wrap.querySelector('#add-item').onclick = ()=>{
-        const nameEl = wrap.querySelector('#new-item-name'), catEl = wrap.querySelector('#new-item-cat'), descEl = wrap.querySelector('#new-item-desc'), priceEl = wrap.querySelector('#new-item-price');
-        const name = nameEl.value.trim(); const category = catEl.value.trim(); const desc = descEl.value.trim(); const price = parseFloat(priceEl.value);
+        const nameEl = wrap.querySelector('#new-item-name'), catSelectEl = wrap.querySelector('#new-item-cat-select'), catNewEl = wrap.querySelector('#new-item-cat-new'), descEl = wrap.querySelector('#new-item-desc'), priceEl = wrap.querySelector('#new-item-price');
+        const name = nameEl.value.trim();
+        const category = catSelectEl.value === '__new__' ? catNewEl.value.trim() : catSelectEl.value;
+        const desc = descEl.value.trim(); const price = parseFloat(priceEl.value);
         if(!name || isNaN(price)){ toast('Inserisci nome e prezzo validi'); return; }
         if(!d.menu) d.menu = [];
         const entry = {id: uid('M-'), name, price};
         if(desc) entry.desc = desc;
         if(category) entry.category = category;
         d.menu.push(entry);
-        nameEl.value=''; descEl.value=''; priceEl.value=''; catEl.value='';
+        nameEl.value=''; descEl.value=''; priceEl.value=''; catSelectEl.value=''; catNewEl.value=''; catNewEl.style.display='none';
         renderMenuEditor();
       };
       wrap.querySelector('#excel-file').onchange = (e)=> importMenuFromExcel(e.target.files[0], d, renderMenuEditor);
@@ -1520,6 +1624,11 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   }
 
   function isValidSlug(s){ return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s); }
+  function hasPlus(t){
+    if(t.plan === 'plus') return true;
+    if(t.plusTrialUntil && t.plusTrialUntil >= todayStr(0)) return true;
+    return false;
+  }
 
   async function saveTenantDraft(){
     const d = state.adminDraft;
@@ -1538,7 +1647,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         slug = d.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + uid('').toLowerCase();
       }
       const pinHash = await sha256(d.pin.trim());
-      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'' };
+      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'' };
       tenants.push(tenant);
       await sSet('tenant:'+slug, tenant);
       await sSet('orders:'+slug, []);
@@ -1561,7 +1670,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         if(!confirm('Il link e il QR attuali smetteranno di funzionare. Continuare?')) return;
         finalSlug = newSlug;
       }
-      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'' };
+      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'' };
       if(d.pin && d.pin.trim()){ updated.pinHash = await sha256(d.pin.trim()); }
       if(wantsRename){
         const oldOrders = await loadOrders(existing.slug);
