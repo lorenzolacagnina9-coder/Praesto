@@ -557,9 +557,12 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     renderLiveStatus(null);
 
     if(confirmationPollInterval) clearInterval(confirmationPollInterval);
+    let prevStatus = null;
     async function poll(){
       if(state.view !== 'customerConfirmation' || state.lastOrderId !== orderId){ clearInterval(confirmationPollInterval); confirmationPollInterval = null; return; }
       const order = await sGet('orderitem:'+t.slug+':'+orderId);
+      if(order && prevStatus !== null && order.status !== prevStatus){ beep(); }
+      if(order) prevStatus = order.status;
       renderLiveStatus(order);
     }
     poll();
@@ -627,8 +630,13 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   async function submitCheckOrder(){
     const t = state.activeTenant;
     if(!state.checkOrderInput){ setState({checkOrderError:'Inserisci il codice ordine.'}); return; }
-    const orders = await loadOrders(t.slug);
-    const o = orders.find(x=>x.id.toLowerCase() === state.checkOrderInput.toLowerCase());
+    const normalizedId = state.checkOrderInput.trim().toUpperCase();
+    let o = await sGet('orderitem:'+t.slug+':'+normalizedId);
+    if(!o){
+      // ripiego: cerca nell'elenco completo, nel caso l'id non combaci esattamente
+      const orders = await loadOrders(t.slug);
+      o = orders.find(x=> x.id && x.id.toUpperCase() === normalizedId) || null;
+    }
     if(!o){ setState({checkedOrder:null, checkOrderError:'Codice non trovato.'}); return; }
     setState({checkedOrder:o, checkOrderError:''});
   }
