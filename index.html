@@ -1232,6 +1232,13 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <p class="small-note" style="margin-bottom:14px;">Scarica una copia completa di tutti i locali, menu e ordini — utile per non perdere nulla se cancelli i dati del browser per sbaglio.</p>
         <button class="btn btn-ghost btn-block" id="do-backup" style="margin-bottom:10px;">⬇️ Scarica backup completo</button>
         <label class="btn btn-ghost btn-block" style="display:block;text-align:center;cursor:pointer;">⬆️ Ripristina da backup<input type="file" id="restore-file" accept=".json" style="display:none;"></label>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:6px;font-size:15px;">Cambia password amministratore</h3>
+        <div class="field"><label>Password attuale</label><input id="cp-old" type="password"></div>
+        <div class="field"><label>Nuova password</label><input id="cp-new" type="password"></div>
+        <div class="field"><label>Conferma nuova password</label><input id="cp-new2" type="password"></div>
+        <button class="btn btn-ghost btn-block" id="cp-save">Aggiorna password</button>
       </div>`;
     const rows = wrap.querySelector('#tenant-rows');
     if(state.tenants.length===0){
@@ -1254,6 +1261,21 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       });
       wrap.querySelector('#do-backup').onclick = downloadBackup;
       wrap.querySelector('#restore-file').onchange = (e)=> restoreBackup(e.target.files[0]);
+      wrap.querySelector('#cp-save').onclick = async ()=>{
+        const oldPass = wrap.querySelector('#cp-old').value;
+        const newPass = wrap.querySelector('#cp-new').value;
+        const newPass2 = wrap.querySelector('#cp-new2').value;
+        if(!oldPass || !newPass){ toast('Compila tutti i campi.'); return; }
+        if(newPass !== newPass2){ toast('Le nuove password non coincidono.'); return; }
+        if(newPass.length < 4){ toast('Usa almeno 4 caratteri.'); return; }
+        const cfg = await sGet('admin_config');
+        const oldHash = await sha256(oldPass);
+        if(!cfg || cfg.passHash !== oldHash){ toast('Password attuale non corretta.'); return; }
+        const newHash = await sha256(newPass);
+        const ok = await sSet('admin_config', {passHash: newHash});
+        if(ok){ toast('Password aggiornata'); wrap.querySelector('#cp-old').value=''; wrap.querySelector('#cp-new').value=''; wrap.querySelector('#cp-new2').value=''; }
+        else toast('Errore, riprova.');
+      };
     },0);
     return wrap;
   }
