@@ -153,6 +153,10 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   // dispositivo (cliente e locale su telefoni diversi), non solo da questo browser.
   const DB_URL = "https://appizzeria-74675-default-rtdb.europe-west1.firebasedatabase.app";
   function keyToPath(key){
+    if(key.indexOf('orderitem:') === 0){
+      const rest = key.slice(10); const sep = rest.indexOf(':');
+      return 'orders/' + encodeURIComponent(rest.slice(0,sep)) + '/' + encodeURIComponent(rest.slice(sep+1));
+    }
     if(key.indexOf('orders:') === 0) return 'orders/' + encodeURIComponent(key.slice(7));
     if(key.indexOf('tenant:') === 0) return 'tenants/' + encodeURIComponent(key.slice(7));
     return key;
@@ -305,7 +309,12 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       else { setState({view:'linkInvalid'}); }
     } else { setState({view:'home'}); }
   }
-  async function loadOrders(slug){ return (await sGet('orders:'+slug)) || []; }
+  async function loadOrders(slug){
+    const raw = await sGet('orders:'+slug);
+    if(!raw) return [];
+    return Array.isArray(raw) ? raw : Object.values(raw);
+  }
+  async function saveOrderItem(slug, order){ return sSet('orderitem:'+slug+':'+order.id, order); }
   async function loadAllTenants(){
     const slugs = (await sGet('tenant_index')) || [];
     const list = await Promise.all(slugs.map(s => sGet('tenant:'+s)));
@@ -501,17 +510,17 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const t = state.activeTenant;
     const items = (t.menu||[]).filter(m=>state.cart[m.id]>0).map(m=>({id:m.id, name:m.name, price:m.price, qty:state.cart[m.id]}));
     if(items.length===0 || !state.selectedSlot) return;
-    const orders = await loadOrders(t.slug);
     const order = { id: uid('T-'), customerName: state.customerName, customerPhone: state.customerPhone, note: state.orderNote,
       items, total: items.reduce((s,i)=>s+i.price*i.qty,0), date: state.selectedSlot.date, time: state.selectedSlot.time, status: 'pending', createdAt: Date.now() };
-    orders.push(order);
-    const ok = await sSet('orders:'+t.slug, orders);
+    const ok = await saveOrderItem(t.slug, order);
     if(ok){ setState({view:'customerConfirmation', lastOrderId: order.id, cart:{}, selectedSlot:null, customerName:'', customerPhone:'', orderNote:''}); }
     else { toast('Errore di connessione, riprova.'); }
   }
 
+  let confirmationPollInterval = null;
   function viewCustomerConfirmation(){
     const t = state.activeTenant;
+    const orderId = state.lastOrderId;
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="brandbar"><div class="mark" style="--m-accent:${t.accent}">${markHTML(t)}</div><div><div class="name">${t.name}</div></div></div>
@@ -519,12 +528,56 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div class="check-anim"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#0f1a0d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <h2 style="margin-bottom:8px;">Ordine inviato</h2>
         <p style="color:var(--muted);font-size:14.5px;margin-bottom:4px;">Codice ordine</p>
-        <p style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:var(--accent, var(--crust));margin-bottom:16px;">${state.lastOrderId}</p>
-        <p style="color:var(--parchment-dim);font-size:14.5px;line-height:1.6;">Il locale sta verificando la disponibilità e ti confermerà a breve.</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:var(--accent, var(--crust));margin-bottom:16px;">${orderId}</p>
+        <div id="live-status"></div>
       </div>
       <button class="btn btn-ghost btn-block" id="new-order">Fai un altro ordine</button>`;
-    wrap.querySelector('#new-order').onclick = ()=> setState({view:'customerOrder'});
+    wrap.querySelector('#new-order').onclick = ()=>{ if(confirmationPollInterval){ clearInterval(confirmationPollInterval); confirmationPollInterval = null; } setState({view:'customerOrder'}); };
+
+    const statusEl = wrap.querySelector('#live-status');
+    function renderLiveStatus(order){
+      if(!order){ statusEl.innerHTML = `<p style="color:var(--parchment-dim);font-size:14.5px;line-height:1.6;">Il locale sta verificando la disponibilità e ti confermerà a breve.</p>`; return; }
+      if(order.status === 'pending'){
+        statusEl.innerHTML = `<p style="color:var(--parchment-dim);font-size:14.5px;line-height:1.6;">⏳ In attesa di conferma dal locale — questa pagina si aggiorna da sola, non serve ricaricare.</p>`;
+      } else if(order.status === 'confirmed'){
+        statusEl.innerHTML = `<p style="color:var(--basil-bright);font-weight:700;font-size:15.5px;margin-bottom:6px;">✅ Ordine confermato!</p><p style="color:var(--parchment-dim);font-size:14.5px;">Ritira ${dayLabelFromDate(order.date).toLowerCase()} alle ${order.time}.</p>`;
+      } else if(order.status === 'rejected'){
+        statusEl.innerHTML = `<p style="color:var(--tomato-bright);font-weight:700;font-size:15.5px;margin-bottom:6px;">Il locale non può accettare questo orario</p><p style="color:var(--parchment-dim);font-size:14.5px;">Prova a proporre un altro orario con un nuovo ordine.</p>`;
+      } else if(order.status === 'proposed'){
+        statusEl.innerHTML = `<p style="color:var(--crust-deep);font-weight:700;font-size:15.5px;margin-bottom:10px;">Il locale propone un nuovo orario: ${dayLabelFromDate(order.proposedDate)} alle ${order.proposedTime}</p>`;
+        const row = document.createElement('div'); row.className = 'row';
+        const acceptBtn = document.createElement('button'); acceptBtn.className='btn btn-confirm'; acceptBtn.textContent='Accetta';
+        acceptBtn.onclick = ()=> respondToProposalDirect(t, order, true);
+        const declineBtn = document.createElement('button'); declineBtn.className='btn btn-danger'; declineBtn.textContent='Rifiuta';
+        declineBtn.onclick = ()=> respondToProposalDirect(t, order, false);
+        row.appendChild(acceptBtn); row.appendChild(declineBtn);
+        statusEl.appendChild(row);
+      }
+    }
+    renderLiveStatus(null);
+
+    if(confirmationPollInterval) clearInterval(confirmationPollInterval);
+    async function poll(){
+      if(state.view !== 'customerConfirmation' || state.lastOrderId !== orderId){ clearInterval(confirmationPollInterval); confirmationPollInterval = null; return; }
+      const order = await sGet('orderitem:'+t.slug+':'+orderId);
+      renderLiveStatus(order);
+    }
+    poll();
+    confirmationPollInterval = setInterval(poll, 5000);
     return wrap;
+  }
+
+  async function respondToProposalDirect(t, order, accept){
+    if(accept){
+      order.status = 'confirmed';
+      order.date = order.proposedDate;
+      order.time = order.proposedTime;
+    } else {
+      order.status = 'rejected';
+    }
+    const ok = await saveOrderItem(t.slug, order);
+    if(ok) toast(accept ? 'Nuovo orario accettato' : 'Proposta rifiutata');
+    else toast('Errore, riprova.');
   }
 
   function viewCustomerCheckOrder(){
@@ -583,18 +636,17 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   async function respondToProposal(accept){
     const t = state.activeTenant;
     const o = state.checkedOrder;
-    const orders = await loadOrders(t.slug);
-    const idx = orders.findIndex(x=>x.id===o.id);
-    if(idx===-1) return;
+    const order = await sGet('orderitem:'+t.slug+':'+o.id);
+    if(!order) return;
     if(accept){
-      orders[idx].status = 'confirmed';
-      orders[idx].date = orders[idx].proposedDate;
-      orders[idx].time = orders[idx].proposedTime;
+      order.status = 'confirmed';
+      order.date = order.proposedDate;
+      order.time = order.proposedTime;
     } else {
-      orders[idx].status = 'rejected';
+      order.status = 'rejected';
     }
-    const ok = await sSet('orders:'+t.slug, orders);
-    if(ok){ toast(accept ? 'Nuovo orario accettato' : 'Proposta rifiutata'); setState({checkedOrder: orders[idx]}); }
+    const ok = await saveOrderItem(t.slug, order);
+    if(ok){ toast(accept ? 'Nuovo orario accettato' : 'Proposta rifiutata'); setState({checkedOrder: order}); }
     else toast('Errore, riprova.');
   }
 
@@ -820,15 +872,13 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   }
 
   async function savePhoneOrder(t, date, time, customerName, cart){
-    const orders = await loadOrders(t.slug);
     const items = (t.menu||[]).filter(m=>cart[m.id]>0).map(m=>({id:m.id, name:m.name, price:m.price, qty:cart[m.id]}));
     const total = items.reduce((s,i)=>s+i.price*i.qty,0);
     const order = {
       id: uid('T-'), customerName: customerName || 'Cliente telefonico', customerPhone: '—', note: '',
       items, total, date, time, status: 'confirmed', source: 'phone', createdAt: Date.now()
     };
-    orders.push(order);
-    const ok = await sSet('orders:'+t.slug, orders);
+    const ok = await saveOrderItem(t.slug, order);
     if(ok){ toast('Ordine telefonico registrato'); render(); }
     else toast('Errore, riprova.');
   }
@@ -1072,24 +1122,22 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   }
 
   async function proposeNewTime(slug, orderId, date, time){
-    const orders = await loadOrders(slug);
-    const idx = orders.findIndex(o=>o.id===orderId);
-    if(idx===-1) return;
-    orders[idx].status = 'proposed';
-    orders[idx].proposedDate = date;
-    orders[idx].proposedTime = time;
-    const ok = await sSet('orders:'+slug, orders);
+    const order = await sGet('orderitem:'+slug+':'+orderId);
+    if(!order) return;
+    order.status = 'proposed';
+    order.proposedDate = date;
+    order.proposedTime = time;
+    const ok = await saveOrderItem(slug, order);
     if(ok){ toast('Nuovo orario proposto al cliente'); render(); }
     else toast('Errore, riprova.');
   }
 
   async function updateOrderStatus(slug, orderId, status){
-    const orders = await loadOrders(slug);
-    const idx = orders.findIndex(o=>o.id===orderId);
-    if(idx===-1) return;
-    orders[idx].status = status;
-    if(status==='pending'){ delete orders[idx].proposedDate; delete orders[idx].proposedTime; }
-    const ok = await sSet('orders:'+slug, orders);
+    const order = await sGet('orderitem:'+slug+':'+orderId);
+    if(!order) return;
+    order.status = status;
+    if(status==='pending'){ delete order.proposedDate; delete order.proposedTime; }
+    const ok = await saveOrderItem(slug, order);
     if(ok){ toast(status==='confirmed' ? 'Ordine confermato' : status==='rejected' ? 'Ordine rifiutato' : status==='pending' ? 'Proposta annullata' : 'Aggiornato'); render(); }
     else toast('Errore, riprova.');
   }
