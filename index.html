@@ -144,6 +144,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08a</div>
 <script>
 (function(){
   "use strict";
@@ -544,16 +545,18 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
     const date = todayStr(dayOffset);
     const closed = (tenant.closedDates||[]).includes(date);
+    const blockedSet = new Set(tenant.blockedSlots||[]);
     const orders = await loadOrders(tenant.slug);
     container.innerHTML = '';
     if(slots.length===0){ container.innerHTML = '<p class="small-note">Nessuna fascia configurata.</p>'; return; }
     slots.forEach(time=>{
+      const slotBlocked = closed || blockedSet.has(date+'|'+time);
       const booked = orders.filter(o=> o.date===date && o.time===time && o.status!=='rejected').length;
-      const remaining = closed ? 0 : cfg.capacityPerSlot - booked;
+      const remaining = slotBlocked ? 0 : cfg.capacityPerSlot - booked;
       const full = remaining <= 0;
       const btn = document.createElement('button');
       btn.className = 'slot' + (full ? ' full' : '') + ((state.selectedSlot && state.selectedSlot.date===date && state.selectedSlot.time===time) ? ' selected' : '');
-      btn.innerHTML = `${time}<span class="cap">${closed ? 'chiuso' : (full ? 'pieno' : remaining+' post.')}</span>`;
+      btn.innerHTML = `${time}<span class="cap">${slotBlocked ? 'chiuso' : (full ? 'pieno' : remaining+' post.')}</span>`;
       btn.disabled = full;
       btn.onclick = ()=> setState({selectedSlot:{date, time}});
       container.appendChild(btn);
@@ -866,6 +869,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           <div><b>Accettiamo ordini oggi</b><span>${closedToday ? 'Disattivato: i clienti non possono più ordinare per oggi' : 'Attivo: i clienti possono ordinare normalmente'}</span></div>
           <div class="switch ${closedToday ? '' : 'on'}" id="today-switch"><div class="knob"></div></div>
         </div>
+        <button class="btn btn-ghost btn-block" id="hours-toggle" style="margin-bottom:18px;">🕐 Orari e disponibilità</button>
+        <div id="hours-form" style="display:none;"></div>
         <button class="btn btn-ghost btn-block" id="period-toggle" style="margin-bottom:18px;">📅 Chiudi per un periodo (ferie, ristrutturazione...)</button>
         <div id="period-form" style="display:none;"></div>
         <button class="btn btn-ghost btn-block" id="phone-order-toggle" style="margin-bottom:18px;">📞 Registra ordine preso al telefono</button>
@@ -875,6 +880,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         content.querySelector('#today-switch').onclick = ()=> toggleClosedToday(t);
         content.querySelector('#phone-order-toggle').onclick = ()=> togglePhoneOrderForm(content, t);
         content.querySelector('#period-toggle').onclick = ()=> togglePeriodForm(content, t);
+        content.querySelector('#hours-toggle').onclick = ()=> toggleHoursForm(content, t);
       },0);
       const ordersArea = content.querySelector('#orders-area');
       const orders = await loadOrders(t.slug);
@@ -967,15 +973,18 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       const cfg = t.slots;
       const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
       const date = todayStr(selectedOffset);
+      const dayClosed = (t.closedDates||[]).includes(date);
+      const blockedSet = new Set(t.blockedSlots||[]);
       const orders = await loadOrders(t.slug);
       grid.innerHTML = '';
       slots.forEach(time=>{
+        const slotBlocked = dayClosed || blockedSet.has(date+'|'+time);
         const booked = orders.filter(o=> o.date===date && o.time===time && o.status!=='rejected').length;
-        const remaining = cfg.capacityPerSlot - booked;
+        const remaining = slotBlocked ? 0 : cfg.capacityPerSlot - booked;
         const full = remaining <= 0;
         const btn = document.createElement('button');
         btn.className = 'slot' + (full ? ' full' : '');
-        btn.innerHTML = `${time}<span class="cap">${full ? 'pieno' : remaining+' post.'}</span>`;
+        btn.innerHTML = `${time}<span class="cap">${slotBlocked ? 'chiusa' : (full ? 'pieno' : remaining+' post.')}</span>`;
         btn.disabled = full;
         btn.onclick = ()=> savePhoneOrder(t, date, time, area.querySelector('#po-name').value.trim(), poCart);
         grid.appendChild(btn);
@@ -1247,15 +1256,17 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     grid.innerHTML = '<div class="spinner"></div>';
     const cfg = t.slots;
     const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
+    const blockedSet = new Set(t.blockedSlots||[]);
     const orders = await loadOrders(t.slug);
     grid.innerHTML = '';
     slots.forEach(time=>{
+      const slotBlocked = blockedSet.has(o.date+'|'+time);
       const booked = orders.filter(x=> x.date===o.date && x.time===time && x.status!=='rejected' && x.id!==o.id).length;
-      const remaining = cfg.capacityPerSlot - booked;
+      const remaining = slotBlocked ? 0 : cfg.capacityPerSlot - booked;
       const full = remaining <= 0;
       const btn = document.createElement('button');
       btn.className = 'slot' + (full ? ' full' : '');
-      btn.innerHTML = `${time}<span class="cap">${full ? 'pieno' : remaining+' post.'}</span>`;
+      btn.innerHTML = `${time}<span class="cap">${slotBlocked ? 'chiusa' : (full ? 'pieno' : remaining+' post.')}</span>`;
       btn.disabled = full;
       btn.onclick = ()=> proposeNewTime(t.slug, o.id, o.date, time);
       grid.appendChild(btn);
@@ -1292,6 +1303,79 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const ok = await sSet('tenant:'+cur.slug, cur);
     if(ok){ toast(closedDates.has(today) ? 'Ordini sospesi per oggi' : 'Ordini riattivati per oggi'); setState({activeTenant:cur}); }
     else toast('Errore, riprova.');
+  }
+
+  function toggleHoursForm(wrap, t){
+    const area = wrap.querySelector('#hours-form');
+    const isOpen = area.style.display !== 'none';
+    if(isOpen){ area.style.display='none'; return; }
+    area.style.display='block';
+    let selectedOffset = 0;
+    area.innerHTML = `<div class="card">
+      <h3 style="margin-bottom:12px;font-size:15px;">Orari di apertura</h3>
+      <div class="row">
+        <div class="field"><label>Apertura</label><input id="h-open" type="time" value="${t.slots.openFrom}"></div>
+        <div class="field"><label>Chiusura</label><input id="h-close" type="time" value="${t.slots.openTo}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Durata fascia (min)</label><input id="h-slotmin" type="number" min="5" step="5" value="${t.slots.slotMinutes}"></div>
+        <div class="field"><label>Ordini max a fascia</label><input id="h-cap" type="number" min="1" value="${t.slots.capacityPerSlot}"></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="h-save">Salva orari</button>
+      <div class="divider"></div>
+      <h3 style="margin-bottom:8px;font-size:15px;">Chiudi singole fasce</h3>
+      <p class="small-note" style="margin-bottom:12px;">Tocca una fascia per bloccarla o riaprirla — utile se per un'ora specifica non potete proprio accettare altri ritiri, senza chiudere tutta la giornata.</p>
+      <div class="row" style="margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" data-off="0" id="h-day0">Oggi</button>
+        <button class="btn btn-ghost btn-sm" data-off="1" id="h-day1">Domani</button>
+        <button class="btn btn-ghost btn-sm" data-off="2" id="h-day2">Dopodomani</button>
+      </div>
+      <div class="slot-grid" id="h-slots"></div>
+    </div>`;
+
+    area.querySelector('#h-save').onclick = async ()=>{
+      const cur = JSON.parse(JSON.stringify(t));
+      cur.slots = {
+        openFrom: area.querySelector('#h-open').value,
+        openTo: area.querySelector('#h-close').value,
+        slotMinutes: Number(area.querySelector('#h-slotmin').value),
+        capacityPerSlot: Number(area.querySelector('#h-cap').value)
+      };
+      const ok = await sSet('tenant:'+cur.slug, cur);
+      if(ok){ toast('Orari aggiornati'); setState({activeTenant:cur}); }
+      else toast('Errore, riprova.');
+    };
+
+    const dayButtons = { 0: area.querySelector('#h-day0'), 1: area.querySelector('#h-day1'), 2: area.querySelector('#h-day2') };
+    async function refreshHourSlots(){
+      Object.entries(dayButtons).forEach(([off,btn])=> btn.className = 'btn btn-sm ' + (Number(off)===selectedOffset ? 'btn-primary' : 'btn-ghost'));
+      const grid = area.querySelector('#h-slots');
+      grid.innerHTML = '<div class="spinner"></div>';
+      const cfg = t.slots;
+      const slots = genSlots(cfg.openFrom, cfg.openTo, cfg.slotMinutes);
+      const date = todayStr(selectedOffset);
+      const blocked = new Set(t.blockedSlots||[]);
+      grid.innerHTML = '';
+      slots.forEach(time=>{
+        const key = date+'|'+time;
+        const isBlocked = blocked.has(key);
+        const btn = document.createElement('button');
+        btn.className = 'slot' + (isBlocked ? ' full' : '');
+        btn.innerHTML = `${time}<span class="cap">${isBlocked ? 'chiusa' : 'aperta'}</span>`;
+        btn.onclick = async ()=>{
+          const cur = JSON.parse(JSON.stringify(t));
+          const curBlocked = new Set(cur.blockedSlots||[]);
+          if(curBlocked.has(key)) curBlocked.delete(key); else curBlocked.add(key);
+          cur.blockedSlots = Array.from(curBlocked);
+          const ok = await sSet('tenant:'+cur.slug, cur);
+          if(ok){ t.blockedSlots = cur.blockedSlots; setState({activeTenant:cur}); toast(curBlocked.has(key) ? 'Fascia chiusa' : 'Fascia riaperta'); }
+          else toast('Errore, riprova.');
+        };
+        grid.appendChild(btn);
+      });
+    }
+    Object.entries(dayButtons).forEach(([off,btn])=> btn.onclick = ()=>{ selectedOffset = Number(off); refreshHourSlots(); });
+    refreshHourSlots();
   }
 
   function togglePeriodForm(wrap, t){
