@@ -360,6 +360,22 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     return wrap;
   }
 
+  function viewAdminConnError(){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<div class="card" style="text-align:center;padding:40px 22px;">
+        <div style="font-size:38px;margin-bottom:10px;">📡</div>
+        <h2 style="margin-bottom:8px;">Non riesco a controllare la password</h2>
+        <p style="color:var(--muted);font-size:14.5px;margin-bottom:16px;">C'è stato un problema a raggiungere il database — non è detto che la password sia stata persa, potrebbe essere solo una connessione lenta o instabile in questo momento. Riprova tra qualche secondo.</p>
+        <button class="btn btn-primary btn-block" id="retry-admin">Riprova</button>
+        <button class="btn btn-ghost btn-block" id="back-admin" style="margin-top:10px;">Torna indietro</button>
+      </div>`;
+    setTimeout(()=>{
+      wrap.querySelector('#retry-admin').onclick = openAdminAuth;
+      wrap.querySelector('#back-admin').onclick = ()=> setState({view:'home'});
+    },0);
+    return wrap;
+  }
+
   // ---------------- CUSTOMER ORDER FLOW ----------------
   function viewCustomerOrder(){
     const t = state.activeTenant;
@@ -380,28 +396,38 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 
     const menuCard = document.createElement('div');
     menuCard.className = 'card';
-    menuCard.innerHTML = `<h3 style="margin-bottom:10px;">Menu</h3>`;
+    const lang = state.menuLang || 'it';
+    menuCard.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;">Menu</h3>
+      <button class="btn btn-ghost btn-sm" id="lang-toggle">${lang==='it' ? '🇬🇧 English' : '🇮🇹 Italiano'}</button>
+    </div>`;
     if(!t.menu || t.menu.length===0){ menuCard.innerHTML += `<p class="small-note">Il menu non è stato ancora caricato dal locale.</p>`; }
+    if(lang==='en' && state.menuTranslating){ menuCard.innerHTML += `<div class="spinner"></div><p class="small-note" style="text-align:center;">Traduzione in corso…</p>`; }
     const menuItems = t.menu||[];
+    const catTr = (t.categoryTranslations||{});
     const menuCats = [];
     menuItems.forEach(item=>{ const c = item.category||'Altro'; if(!menuCats.includes(c)) menuCats.push(c); });
-    menuCats.forEach(cat=>{
-      if(menuCats.length > 1 || cat !== 'Altro'){
-        const header = document.createElement('div');
-        header.style.cssText = 'font-size:13px;font-weight:700;text-transform:uppercase;color:var(--accent,var(--crust));letter-spacing:.04em;margin:16px 0 4px;';
-        header.textContent = cat;
-        menuCard.appendChild(header);
-      }
-      menuItems.forEach(item=>{
-        if((item.category||'Altro') !== cat) return;
-        const qty = state.cart[item.id] || 0;
-        const row = document.createElement('div');
-        row.className = 'menu-item';
-        row.innerHTML = `<div><div class="mi-name">${item.name}</div>${item.desc ? `<div class="mi-price" style="color:var(--parchment-dim);">${item.desc}</div>` : ''}<div class="mi-price">€ ${Number(item.price).toFixed(2)}</div></div>
-          <div class="qty-ctrl"><button class="qty-btn" data-act="minus" data-id="${item.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${item.id}">+</button></div>`;
-        menuCard.appendChild(row);
+    if(!(lang==='en' && state.menuTranslating)){
+      menuCats.forEach(cat=>{
+        if(menuCats.length > 1 || cat !== 'Altro'){
+          const header = document.createElement('div');
+          header.style.cssText = 'font-size:13px;font-weight:700;text-transform:uppercase;color:var(--accent,var(--crust));letter-spacing:.04em;margin:16px 0 4px;';
+          header.textContent = (lang==='en' && catTr[cat]) ? catTr[cat] : cat;
+          menuCard.appendChild(header);
+        }
+        menuItems.forEach(item=>{
+          if((item.category||'Altro') !== cat) return;
+          const qty = state.cart[item.id] || 0;
+          const showName = (lang==='en' && item.nameEn) ? item.nameEn : item.name;
+          const showDesc = (lang==='en') ? (item.descEn || '') : (item.desc || '');
+          const row = document.createElement('div');
+          row.className = 'menu-item';
+          row.innerHTML = `<div><div class="mi-name">${showName}</div>${showDesc ? `<div class="mi-price" style="color:var(--parchment-dim);">${showDesc}</div>` : ''}<div class="mi-price">€ ${Number(item.price).toFixed(2)}</div></div>
+            <div class="qty-ctrl"><button class="qty-btn" data-act="minus" data-id="${item.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${item.id}">+</button></div>`;
+          menuCard.appendChild(row);
+        });
       });
-    });
+    }
     wrap.appendChild(menuCard);
 
     const slotCard = document.createElement('div');
@@ -465,6 +491,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     setTimeout(()=>{
       const goCheck = wrap.querySelector('#go-check-order');
       if(goCheck) goCheck.onclick = ()=> setState({view:'customerCheckOrder', checkOrderInput:'', checkedOrder:null, checkOrderError:''});
+      const langBtn = wrap.querySelector('#lang-toggle');
+      if(langBtn) langBtn.onclick = ()=> toggleMenuLanguage(t);
     },0);
 
     wrap.querySelectorAll('.qty-btn').forEach(b=>{
@@ -478,8 +506,12 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     });
     setTimeout(()=>{
       const nameEl = document.getElementById('cust-name'), phoneEl = document.getElementById('cust-phone'), noteEl = document.getElementById('cust-note');
-      if(nameEl) nameEl.oninput = e => state.customerName = e.target.value;
-      if(phoneEl) phoneEl.oninput = e => state.customerPhone = e.target.value;
+      const refreshSubmitState = ()=>{
+        const btn = wrap.querySelector('.card button.btn-primary');
+        if(btn && btn.textContent.includes('Proponi ordine')) btn.disabled = !state.selectedSlot || !state.customerName || !state.customerPhone;
+      };
+      if(nameEl) nameEl.oninput = e => { state.customerName = e.target.value; refreshSubmitState(); };
+      if(phoneEl) phoneEl.oninput = e => { state.customerPhone = e.target.value; refreshSubmitState(); };
       if(noteEl) noteEl.oninput = e => state.orderNote = e.target.value;
     },0);
     return wrap;
@@ -505,6 +537,41 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       btn.onclick = ()=> setState({selectedSlot:{date, time}});
       container.appendChild(btn);
     });
+  }
+
+  async function translateText(text){
+    try{
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), 8000);
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=it|en`, {signal: controller.signal});
+      clearTimeout(timer);
+      if(!res.ok) return null;
+      const data = await res.json();
+      const out = data && data.responseData && data.responseData.translatedText;
+      return out || null;
+    } catch(e){ console.error('traduzione fallita', e); return null; }
+  }
+
+  async function toggleMenuLanguage(t){
+    if((state.menuLang||'it') === 'en'){ setState({menuLang:'it'}); return; }
+    const needsTranslation = (t.menu||[]).some(item=>!item.nameEn) || Object.keys(t.categoryTranslations||{}).length < new Set((t.menu||[]).map(i=>i.category||'Altro')).size;
+    if(!needsTranslation){ setState({menuLang:'en'}); return; }
+    setState({menuLang:'en', menuTranslating:true});
+    const menu = JSON.parse(JSON.stringify(t.menu||[]));
+    for(const item of menu){
+      if(item.nameEn) continue;
+      item.nameEn = (await translateText(item.name)) || item.name;
+      if(item.desc) item.descEn = (await translateText(item.desc)) || item.desc;
+    }
+    const categoryTranslations = Object.assign({}, t.categoryTranslations||{});
+    const cats = [...new Set(menu.map(i=>i.category||'Altro'))];
+    for(const cat of cats){
+      if(cat==='Altro' || categoryTranslations[cat]) continue;
+      categoryTranslations[cat] = (await translateText(cat)) || cat;
+    }
+    const updated = { ...t, menu, categoryTranslations };
+    await sSet('tenant:'+t.slug, updated);
+    setState({activeTenant: updated, menuLang:'en', menuTranslating:false});
   }
 
   async function submitOrder(){
@@ -961,16 +1028,6 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       statsArea.appendChild(card1);
 
       if(!hasPlus(t)){
-        const upsell = document.createElement('div');
-        upsell.className = 'card';
-        upsell.innerHTML = `<h3 style="margin-bottom:8px;font-size:15px;">✨ Disponibile con il piano Plus</h3>
-          <p class="small-note" style="margin-bottom:4px;">Con il piano Plus sblocchi:</p>
-          <p class="small-note" style="margin:2px 0;">• Confronto con la settimana precedente</p>
-          <p class="small-note" style="margin:2px 0;">• Suggerimento automatico su quali fasce aumentare la capacità</p>
-          <p class="small-note" style="margin:2px 0;">• Esportazione dati in Excel</p>
-          <p class="small-note" style="margin:2px 0;">• Piatti più venduti</p>
-          <p class="small-note" style="margin:2px 0;">• Gestione di più sedi da un solo accesso</p>`;
-        statsArea.appendChild(upsell);
         return;
       }
 
@@ -1266,8 +1323,18 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
   // ---------------- ADMIN (Lorenzo-only: create/edit locali) ----------------
   async function openAdminAuth(){
     setState({view:'loadingTenant'});
-    const cfg = await sGet('admin_config');
-    setState({view:'adminAuth', adminConfigExists: !!cfg, adminPassInput:'', adminPassInput2:'', adminError:''});
+    try{
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), 9000);
+      const res = await fetch(`${DB_URL}/admin_config.json`, {signal: controller.signal});
+      clearTimeout(timer);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const cfg = await res.json();
+      setState({view:'adminAuth', adminConfigExists: !!cfg, adminPassInput:'', adminPassInput2:'', adminError:''});
+    } catch(e){
+      console.error('impossibile verificare admin_config', e);
+      setState({view:'adminConnError'});
+    }
   }
 
   function viewAdminAuth(){
@@ -1762,6 +1829,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         case 'boot': case 'loadingTenant': root.innerHTML = '<div class="spinner"></div>'; return;
         case 'home': el = viewHome(); break;
         case 'linkInvalid': el = viewLinkInvalid(); break;
+        case 'adminConnError': el = viewAdminConnError(); break;
         case 'customerOrder': el = viewCustomerOrder(); break;
         case 'customerConfirmation': el = viewCustomerConfirmation(); break;
         case 'customerCheckOrder': el = viewCustomerCheckOrder(); break;
