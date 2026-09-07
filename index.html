@@ -144,7 +144,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08a</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08c</div>
 <script>
 (function(){
   "use strict";
@@ -291,7 +291,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 
   let state = {
     view: 'boot', tenants: [], activeSlug: null, activeTenant: null,
-    cart: {}, selectedDayOffset: 0, selectedSlot: null,
+    cart: {}, selectedDayOffset: 0, selectedSlot: null, expandedCategories: {},
     customerName: '', customerPhone: '', orderNote: '',
     loginSlugInput: '', loginPinInput: '', loginError: '',
     adminConfigExists: false, adminPassInput: '', adminPassInput2: '', adminError: '',
@@ -398,58 +398,71 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const menuCard = document.createElement('div');
     menuCard.className = 'card';
     const lang = state.menuLang || 'it';
+    const hasEnglish = (t.menu||[]).some(item=>item.nameEn);
     menuCard.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <h3 style="margin:0;">Menu</h3>
-      <button class="btn btn-ghost btn-sm" id="lang-toggle">${lang==='it' ? '🇬🇧 English' : '🇮🇹 Italiano'}</button>
+      ${hasEnglish ? `<button class="btn btn-ghost btn-sm" id="lang-toggle">${lang==='it' ? '🇬🇧 English' : '🇮🇹 Italiano'}</button>` : ''}
     </div>`;
     if(!t.menu || t.menu.length===0){ menuCard.innerHTML += `<p class="small-note">Il menu non è stato ancora caricato dal locale.</p>`; }
-    if(lang==='en' && state.menuTranslating){ menuCard.innerHTML += `<div class="spinner"></div><p class="small-note" style="text-align:center;">Traduzione in corso…</p>`; }
     const menuItems = t.menu||[];
     const catTr = (t.categoryTranslations||{});
     const menuCats = [];
     menuItems.forEach(item=>{ const c = item.category||'Altro'; if(!menuCats.includes(c)) menuCats.push(c); });
-    if(!(lang==='en' && state.menuTranslating)){
-      menuCats.forEach(cat=>{
-        if(menuCats.length > 1 || cat !== 'Altro'){
-          const header = document.createElement('div');
-          header.style.cssText = 'font-size:13px;font-weight:700;text-transform:uppercase;color:var(--accent,var(--crust));letter-spacing:.04em;margin:16px 0 4px;';
-          header.textContent = (lang==='en' && catTr[cat]) ? catTr[cat] : cat;
-          menuCard.appendChild(header);
+    const singleCategory = !(menuCats.length > 1 || (menuCats[0] && menuCats[0] !== 'Altro'));
+    menuCats.forEach((cat, catIdx)=>{
+      const itemsWrap = document.createElement('div');
+      const isOpen = singleCategory || !!state.expandedCategories[cat];
+      itemsWrap.style.display = isOpen ? 'block' : 'none';
+
+      if(!singleCategory){
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg-panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0 0;font-family:inherit;font-size:15px;font-weight:700;color:var(--ink,var(--parchment));cursor:pointer;';
+        header.innerHTML = `<span>${(lang==='en' && catTr[cat]) ? catTr[cat] : cat}</span><span style="color:var(--accent,var(--crust));font-size:13px;transition:transform .15s ease;transform:rotate(${isOpen?'180deg':'0deg'});">▾</span>`;
+        header.onclick = ()=>{
+          state.expandedCategories[cat] = !state.expandedCategories[cat];
+          const nowOpen = state.expandedCategories[cat];
+          itemsWrap.style.display = nowOpen ? 'block' : 'none';
+          header.querySelector('span:last-child').style.transform = `rotate(${nowOpen?'180deg':'0deg'})`;
+        };
+        menuCard.appendChild(header);
+      }
+
+      const renderedGroups = new Set();
+      menuItems.forEach(item=>{
+        if((item.category||'Altro') !== cat) return;
+        if(item.variantGroup){
+          if(renderedGroups.has(item.variantGroup)) return;
+          renderedGroups.add(item.variantGroup);
+          const variants = menuItems.filter(x=>x.variantGroup===item.variantGroup);
+          const showName = (lang==='en' && item.groupNameEn) ? item.groupNameEn : (item.groupName || item.name);
+          const showDesc = (lang==='en') ? (item.descEn || '') : (item.desc || '');
+          const groupHeader = document.createElement('div');
+          groupHeader.style.cssText = 'padding-top:13px;';
+          groupHeader.innerHTML = `<div class="mi-name">${showName}</div>${showDesc ? `<div class="mi-price" style="color:var(--parchment-dim);">${showDesc}</div>` : ''}`;
+          itemsWrap.appendChild(groupHeader);
+          variants.forEach(v=>{
+            const qty = state.cart[v.id] || 0;
+            const vRow = document.createElement('div');
+            vRow.className = 'menu-item';
+            vRow.style.paddingTop = '6px';
+            vRow.innerHTML = `<div><div class="mi-name" style="font-size:13.5px;font-weight:500;color:var(--parchment-dim);">${v.variantLabel||''}</div><div class="mi-price">€ ${Number(v.price).toFixed(2)}</div></div>
+              <div class="qty-ctrl"><button class="qty-btn" data-act="minus" data-id="${v.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${v.id}">+</button></div>`;
+            itemsWrap.appendChild(vRow);
+          });
+        } else {
+          const qty = state.cart[item.id] || 0;
+          const showName = (lang==='en' && item.nameEn) ? item.nameEn : item.name;
+          const showDesc = (lang==='en') ? (item.descEn || '') : (item.desc || '');
+          const row = document.createElement('div');
+          row.className = 'menu-item';
+          row.innerHTML = `<div><div class="mi-name">${showName}</div>${showDesc ? `<div class="mi-price" style="color:var(--parchment-dim);">${showDesc}</div>` : ''}<div class="mi-price">€ ${Number(item.price).toFixed(2)}</div></div>
+            <div class="qty-ctrl"><button class="qty-btn" data-act="minus" data-id="${item.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${item.id}">+</button></div>`;
+          itemsWrap.appendChild(row);
         }
-        const renderedGroups = new Set();
-        menuItems.forEach(item=>{
-          if((item.category||'Altro') !== cat) return;
-          if(item.variantGroup){
-            if(renderedGroups.has(item.variantGroup)) return;
-            renderedGroups.add(item.variantGroup);
-            const variants = menuItems.filter(x=>x.variantGroup===item.variantGroup);
-            const showName = (lang==='en' && item.groupNameEn) ? item.groupNameEn : (item.groupName || item.name);
-            const showDesc = (lang==='en') ? (item.descEn || '') : (item.desc || '');
-            const row = document.createElement('div');
-            row.className = 'menu-item';
-            row.style.flexDirection = 'column'; row.style.alignItems = 'stretch';
-            const variantRows = variants.map(v=>{
-              const qty = state.cart[v.id] || 0;
-              return `<div class="qty-ctrl" style="justify-content:space-between;margin-top:8px;">
-                <span style="font-size:13.5px;">${v.variantLabel||''} · € ${Number(v.price).toFixed(2)}</span>
-                <span><button class="qty-btn" data-act="minus" data-id="${v.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${v.id}">+</button></span>
-              </div>`;
-            }).join('');
-            row.innerHTML = `<div class="mi-name">${showName}</div>${showDesc ? `<div class="mi-price" style="color:var(--parchment-dim);">${showDesc}</div>` : ''}${variantRows}`;
-            menuCard.appendChild(row);
-          } else {
-            const qty = state.cart[item.id] || 0;
-            const showName = (lang==='en' && item.nameEn) ? item.nameEn : item.name;
-            const showDesc = (lang==='en') ? (item.descEn || '') : (item.desc || '');
-            const row = document.createElement('div');
-            row.className = 'menu-item';
-            row.innerHTML = `<div><div class="mi-name">${showName}</div>${showDesc ? `<div class="mi-price" style="color:var(--parchment-dim);">${showDesc}</div>` : ''}<div class="mi-price">€ ${Number(item.price).toFixed(2)}</div></div>
-              <div class="qty-ctrl"><button class="qty-btn" data-act="minus" data-id="${item.id}">–</button><span class="qty-num">${qty}</span><button class="qty-btn" data-act="plus" data-id="${item.id}">+</button></div>`;
-            menuCard.appendChild(row);
-          }
-        });
       });
-    }
+      menuCard.appendChild(itemsWrap);
+    });
     wrap.appendChild(menuCard);
 
     const slotCard = document.createElement('div');
@@ -514,7 +527,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       const goCheck = wrap.querySelector('#go-check-order');
       if(goCheck) goCheck.onclick = ()=> setState({view:'customerCheckOrder', checkOrderInput:'', checkedOrder:null, checkOrderError:''});
       const langBtn = wrap.querySelector('#lang-toggle');
-      if(langBtn) langBtn.onclick = ()=> toggleMenuLanguage(t);
+      if(langBtn) langBtn.onclick = toggleMenuLanguage;
     },0);
 
     wrap.querySelectorAll('.qty-btn').forEach(b=>{
@@ -563,44 +576,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     });
   }
 
-  async function translateText(text){
-    try{
-      const controller = new AbortController();
-      const timer = setTimeout(()=>controller.abort(), 8000);
-      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=it|en`, {signal: controller.signal});
-      clearTimeout(timer);
-      if(!res.ok) return null;
-      const data = await res.json();
-      const out = data && data.responseData && data.responseData.translatedText;
-      return out || null;
-    } catch(e){ console.error('traduzione fallita', e); return null; }
-  }
-
-  async function toggleMenuLanguage(t){
-    if((state.menuLang||'it') === 'en'){ setState({menuLang:'it'}); return; }
-    const needsTranslation = (t.menu||[]).some(item=>!item.nameEn) || Object.keys(t.categoryTranslations||{}).length < new Set((t.menu||[]).map(i=>i.category||'Altro')).size;
-    if(!needsTranslation){ setState({menuLang:'en'}); return; }
-    setState({menuLang:'en', menuTranslating:true});
-    const menu = JSON.parse(JSON.stringify(t.menu||[]));
-    const groupNameCache = {};
-    for(const item of menu){
-      if(item.variantGroup){
-        if(!groupNameCache[item.variantGroup]) groupNameCache[item.variantGroup] = (await translateText(item.groupName||item.name)) || (item.groupName||item.name);
-        item.groupNameEn = groupNameCache[item.variantGroup];
-      }
-      if(item.nameEn) continue;
-      item.nameEn = (await translateText(item.name)) || item.name;
-      if(item.desc) item.descEn = (await translateText(item.desc)) || item.desc;
-    }
-    const categoryTranslations = Object.assign({}, t.categoryTranslations||{});
-    const cats = [...new Set(menu.map(i=>i.category||'Altro'))];
-    for(const cat of cats){
-      if(cat==='Altro' || categoryTranslations[cat]) continue;
-      categoryTranslations[cat] = (await translateText(cat)) || cat;
-    }
-    const updated = { ...t, menu, categoryTranslations };
-    await sSet('tenant:'+t.slug, updated);
-    setState({activeTenant: updated, menuLang:'en', menuTranslating:false});
+  function toggleMenuLanguage(){
+    setState({menuLang: (state.menuLang||'it')==='it' ? 'en' : 'it'});
   }
 
   async function submitOrder(){
@@ -624,12 +601,20 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       <div class="card" style="text-align:center;padding:36px 22px;">
         <div class="check-anim"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#0f1a0d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <h2 style="margin-bottom:8px;">Ordine inviato</h2>
+        <div class="banner banner-warn" style="text-align:left;margin-bottom:16px;">⚠️ <b>Salva questo codice</b>: ti servirà per ritirare l'ordine.</div>
         <p style="color:var(--muted);font-size:14.5px;margin-bottom:4px;">Codice ordine</p>
-        <p style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:var(--accent, var(--crust));margin-bottom:16px;">${orderId}</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;">
+          <p style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;color:var(--accent, var(--crust));margin:0;">${orderId}</p>
+          <button class="btn btn-ghost btn-sm" id="copy-code" title="Copia il codice">📋 Copia</button>
+        </div>
         <div id="live-status"></div>
       </div>
       <button class="btn btn-ghost btn-block" id="new-order">Fai un altro ordine</button>`;
     wrap.querySelector('#new-order').onclick = ()=>{ if(confirmationPollInterval){ clearInterval(confirmationPollInterval); confirmationPollInterval = null; } setState({view:'customerOrder'}); };
+    wrap.querySelector('#copy-code').onclick = async ()=>{
+      try{ await navigator.clipboard.writeText(orderId); toast('Codice copiato'); }
+      catch(e){ toast('Copia non riuscita: seleziona e copia il codice a mano.'); }
+    };
 
     const statusEl = wrap.querySelector('#live-status');
     function renderLiveStatus(order){
@@ -1620,17 +1605,26 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           const famPriceKey = findKey(row, ['prezzo famiglia','famiglia','prezzo grande','family']);
           const catKey = findKey(row, ['categoria','category']);
           const descKey = findKey(row, ['descrizione','description']);
+          const nameEnKey = findKey(row, ['nome en','name en','english name','nome inglese']);
+          const descEnKey = findKey(row, ['descrizione en','description en','english description','descrizione inglese']);
+          const catEnKey = findKey(row, ['categoria en','category en','english category','categoria inglese']);
           const name = nameKey ? String(row[nameKey]).trim() : '';
           const price = priceKey ? parseFloat(String(row[priceKey]).replace(',','.')) : NaN;
           const famPrice = famPriceKey ? parseFloat(String(row[famPriceKey]).replace(',','.')) : NaN;
           if(!name || isNaN(price)) return;
           const category = (catKey && String(row[catKey]).trim()) || '';
           const desc = (descKey && String(row[descKey]).trim()) || '';
+          const nameEn = (nameEnKey && String(row[nameEnKey]).trim()) || '';
+          const descEn = (descEnKey && String(row[descEnKey]).trim()) || '';
+          const catEn = (catEnKey && String(row[catEnKey]).trim()) || '';
+          if(category && catEn){ if(!d.categoryTranslations) d.categoryTranslations = {}; d.categoryTranslations[category] = catEn; }
           if(!isNaN(famPrice)){
             const groupId = uid('G-');
             const base = { groupName: name, variantGroup: groupId };
             if(category) base.category = category;
             if(desc) base.desc = desc;
+            if(nameEn) base.groupNameEn = nameEn;
+            if(descEn) base.descEn = descEn;
             d.menu.push({ id: uid('M-'), name: `${name} (Normale)`, price, variantLabel:'Normale', ...base });
             d.menu.push({ id: uid('M-'), name: `${name} (Famiglia)`, price: famPrice, variantLabel:'Famiglia', ...base });
             added += 2;
@@ -1638,6 +1632,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
             const entry = {id: uid('M-'), name, price};
             if(category) entry.category = category;
             if(desc) entry.desc = desc;
+            if(nameEn) entry.nameEn = nameEn;
+            if(descEn) entry.descEn = descEn;
             d.menu.push(entry);
             added++;
           }
@@ -1703,10 +1699,15 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           <div class="field" style="margin-bottom:0;max-width:110px;"><input id="new-item-price-family" type="number" step="0.5" placeholder="€ Famiglia"></div>
         </div>
         <p class="small-note" style="margin-top:0;">Compila "€ Famiglia" solo se il piatto ha due taglie (es. pizza normale/famiglia) — il cliente potrà scegliere tra le due.</p>
+        <div class="row">
+          <div class="field" style="margin-bottom:0;"><input id="new-item-name-en" placeholder="Nome in inglese (facoltativo)"></div>
+          <div class="field" style="margin-bottom:0;"><input id="new-item-desc-en" placeholder="Descrizione in inglese (facoltativa)"></div>
+        </div>
+        <p class="small-note" style="margin-top:0;">Se li compili, il cliente potrà vedere il menu in inglese toccando un pulsante dedicato.</p>
         <button class="btn btn-ghost btn-block" id="add-item" style="margin-top:10px;">Aggiungi voce al menu</button>
         <div class="divider"></div>
         <label class="btn btn-ghost btn-block" style="display:block;text-align:center;cursor:pointer;">📊 Carica menu da Excel<input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none;"></label>
-        <p class="small-note">Il file deve avere una riga di intestazione con le colonne <b>Nome</b>, <b>Categoria</b>, <b>Descrizione</b>, <b>Prezzo</b> (le ultime due facoltative, ordine libero). Aggiungi anche <b>Prezzo Famiglia</b> per i piatti con due taglie: verranno creati automaticamente "Normale" e "Famiglia" collegati. Le voci lette si aggiungono a quelle già presenti.</p>
+        <p class="small-note">Il file deve avere una riga di intestazione con le colonne <b>Nome</b>, <b>Categoria</b>, <b>Descrizione</b>, <b>Prezzo</b> (le ultime due facoltative, ordine libero). Aggiungi <b>Prezzo Famiglia</b> per i piatti con due taglie, e <b>Nome EN</b> / <b>Descrizione EN</b> / <b>Categoria EN</b> per la versione inglese già tradotta da te — così il cliente la vede all'istante, senza attese. Le voci lette si aggiungono a quelle già presenti.</p>
       </div>
       <button class="btn btn-primary btn-block" id="d-save">${isNew ? 'Crea locale' : 'Salva modifiche'}</button>
       ${!isNew ? `<button class="btn btn-ghost btn-block" id="d-showlink" style="margin-top:10px;">Vedi link e QR</button>` : ''}
@@ -1811,24 +1812,31 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       };
       wrap.querySelector('#add-item').onclick = ()=>{
         const nameEl = wrap.querySelector('#new-item-name'), catSelectEl = wrap.querySelector('#new-item-cat-select'), catNewEl = wrap.querySelector('#new-item-cat-new'), descEl = wrap.querySelector('#new-item-desc'), priceEl = wrap.querySelector('#new-item-price'), priceFamEl = wrap.querySelector('#new-item-price-family');
+        const nameEnEl = wrap.querySelector('#new-item-name-en'), descEnEl = wrap.querySelector('#new-item-desc-en');
         const name = nameEl.value.trim();
         const category = catSelectEl.value === '__new__' ? catNewEl.value.trim() : catSelectEl.value;
         const desc = descEl.value.trim(); const price = parseFloat(priceEl.value);
         const familyPrice = parseFloat(priceFamEl.value);
+        const nameEn = nameEnEl.value.trim(); const descEn = descEnEl.value.trim();
         if(!name || isNaN(price)){ toast('Inserisci nome e prezzo validi'); return; }
         if(!d.menu) d.menu = [];
         if(!isNaN(familyPrice)){
           const groupId = uid('G-');
           const base = { groupName: name, variantGroup: groupId, desc, category };
+          if(nameEn) base.groupNameEn = nameEn;
+          if(descEn) base.descEn = descEn;
           d.menu.push({ id: uid('M-'), name: `${name} (Normale)`, price, variantLabel:'Normale', ...base });
           d.menu.push({ id: uid('M-'), name: `${name} (Famiglia)`, price: familyPrice, variantLabel:'Famiglia', ...base });
         } else {
           const entry = {id: uid('M-'), name, price};
           if(desc) entry.desc = desc;
           if(category) entry.category = category;
+          if(nameEn) entry.nameEn = nameEn;
+          if(descEn) entry.descEn = descEn;
           d.menu.push(entry);
         }
         nameEl.value=''; descEl.value=''; priceEl.value=''; priceFamEl.value=''; catSelectEl.value=''; catNewEl.value=''; catNewEl.style.display='none';
+        nameEnEl.value=''; descEnEl.value='';
         renderMenuEditor();
       };
       wrap.querySelector('#excel-file').onchange = (e)=> importMenuFromExcel(e.target.files[0], d, renderMenuEditor);
@@ -1863,7 +1871,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         slug = d.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + uid('').toLowerCase();
       }
       const pinHash = await sha256(d.pin.trim());
-      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'' };
+      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations:d.categoryTranslations||{} };
       tenants.push(tenant);
       await sSet('tenant:'+slug, tenant);
       await sSet('orders:'+slug, []);
@@ -1886,7 +1894,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         if(!confirm('Il link e il QR attuali smetteranno di funzionare. Continuare?')) return;
         finalSlug = newSlug;
       }
-      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'' };
+      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations: d.categoryTranslations || existing.categoryTranslations || {} };
       if(d.pin && d.pin.trim()){ updated.pinHash = await sha256(d.pin.trim()); }
       if(wantsRename){
         const oldOrders = await loadOrders(existing.slug);
