@@ -144,7 +144,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08e</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08f</div>
 <script>
 (function(){
   "use strict";
@@ -1710,7 +1710,10 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div class="field"><label>Plus di prova fino al (facoltativo)</label><input id="d-plustrial" type="date" value="${d.plusTrialUntil||''}"><p class="hint">Durante la prova, il locale ha accesso alle funzioni Plus (multi-sede, report avanzato, esportazione) anche se il piano sopra è impostato su Base. Lascia vuoto per nessuna prova attiva.</p></div>
       </div>
       <div class="card">
-        <h3 style="margin-bottom:12px;">Menu</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3 style="margin:0;">Menu</h3>
+          <button class="btn btn-danger btn-sm" id="clear-menu" type="button">🗑️ Svuota menu</button>
+        </div>
         <div id="menu-editor"></div>
         <div class="row" style="margin-bottom:8px;">
           <div class="field" style="margin-bottom:0;"><input id="new-item-name" placeholder="Nome piatto"></div>
@@ -1818,6 +1821,14 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#d-review').oninput = e => d.googleReviewLink = e.target.value.trim();
       wrap.querySelector('#d-menunotes').oninput = e => d.menuNotes = e.target.value;
       wrap.querySelector('#d-menunotes-en').oninput = e => d.menuNotesEn = e.target.value;
+      wrap.querySelector('#clear-menu').onclick = ()=>{
+        const count = (d.menu||[]).length;
+        if(count===0){ toast('Il menu è già vuoto.'); return; }
+        if(!confirm(`Stai per eliminare tutte le ${count} voci del menu. Questa azione non si annulla (ma resta comunque da salvare con "Salva modifiche"). Continuare?`)) return;
+        d.menu = [];
+        renderMenuEditor();
+        toast('Menu svuotato — ricordati di salvare per rendere la modifica definitiva');
+      };
       wrap.querySelector('#d-logo').onchange = (e)=>{
         const file = e.target.files[0];
         if(!file) return;
