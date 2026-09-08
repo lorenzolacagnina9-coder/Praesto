@@ -144,7 +144,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08c</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08e</div>
 <script>
 (function(){
   "use strict";
@@ -463,6 +463,12 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       });
       menuCard.appendChild(itemsWrap);
     });
+    if(t.menuNotes && t.menuNotes.trim()){
+      const notesEl = document.createElement('div');
+      notesEl.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--parchment-dim);white-space:pre-line;line-height:1.6;';
+      notesEl.textContent = (lang==='en' && t.menuNotesEn) ? t.menuNotesEn : t.menuNotes;
+      menuCard.appendChild(notesEl);
+    }
     wrap.appendChild(menuCard);
 
     const slotCard = document.createElement('div');
@@ -860,12 +866,15 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div id="period-form" style="display:none;"></div>
         <button class="btn btn-ghost btn-block" id="phone-order-toggle" style="margin-bottom:18px;">📞 Registra ordine preso al telefono</button>
         <div id="phone-order-form" style="display:none;"></div>
+        <button class="btn btn-ghost btn-block" id="qr-toggle" style="margin-bottom:18px;">📱 Link e QR del locale</button>
+        <div id="qr-form" style="display:none;"></div>
         <div id="orders-area"><div class="spinner"></div></div>`;
       setTimeout(()=>{
         content.querySelector('#today-switch').onclick = ()=> toggleClosedToday(t);
         content.querySelector('#phone-order-toggle').onclick = ()=> togglePhoneOrderForm(content, t);
         content.querySelector('#period-toggle').onclick = ()=> togglePeriodForm(content, t);
         content.querySelector('#hours-toggle').onclick = ()=> toggleHoursForm(content, t);
+        content.querySelector('#qr-toggle').onclick = ()=> toggleQrForm(content, t);
       },0);
       const ordersArea = content.querySelector('#orders-area');
       const orders = await loadOrders(t.slug);
@@ -1290,6 +1299,26 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     else toast('Errore, riprova.');
   }
 
+  function toggleQrForm(wrap, t){
+    const area = wrap.querySelector('#qr-form');
+    const isOpen = area.style.display !== 'none';
+    if(isOpen){ area.style.display='none'; return; }
+    area.style.display='block';
+    const link = buildTenantLink(t.slug);
+    area.innerHTML = `<div class="card" style="text-align:center;">
+      <h3 style="margin-bottom:12px;font-size:15px;">Il link e il QR del tuo locale</h3>
+      <p class="small-note" style="margin-bottom:14px;">Usali per cartoncini, adesivi in vetrina o post social — inquadrando questo QR (o aprendo il link) si arriva direttamente al vostro menu.</p>
+      <div id="owner-qr" style="display:flex;justify-content:center;margin-bottom:14px;"></div>
+      <div style="background:var(--bg-panel-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px;word-break:break-all;margin-bottom:10px;">${link}</div>
+      <button class="btn btn-ghost btn-sm" id="qr-copy">📋 Copia link</button>
+    </div>`;
+    renderQR(area.querySelector('#owner-qr'), link);
+    area.querySelector('#qr-copy').onclick = async ()=>{
+      try{ await navigator.clipboard.writeText(link); toast('Link copiato'); }
+      catch(e){ toast('Copia non riuscita: seleziona e copia il link a mano.'); }
+    };
+  }
+
   function toggleHoursForm(wrap, t){
     const area = wrap.querySelector('#hours-form');
     const isOpen = area.style.display !== 'none';
@@ -1708,6 +1737,10 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div class="divider"></div>
         <label class="btn btn-ghost btn-block" style="display:block;text-align:center;cursor:pointer;">📊 Carica menu da Excel<input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none;"></label>
         <p class="small-note">Il file deve avere una riga di intestazione con le colonne <b>Nome</b>, <b>Categoria</b>, <b>Descrizione</b>, <b>Prezzo</b> (le ultime due facoltative, ordine libero). Aggiungi <b>Prezzo Famiglia</b> per i piatti con due taglie, e <b>Nome EN</b> / <b>Descrizione EN</b> / <b>Categoria EN</b> per la versione inglese già tradotta da te — così il cliente la vede all'istante, senza attese. Le voci lette si aggiungono a quelle già presenti.</p>
+        <div class="divider"></div>
+        <div class="field"><label>Note in fondo al menu (facoltativo)</label><textarea id="d-menunotes" rows="3" placeholder="Es. Supplementi disponibili su richiesta: +1€/+2,50€ per mozzarella, wurstel...&#10;Impasto senza glutine +2,50€&#10;Consegna a domicilio +1,50€">${d.menuNotes||''}</textarea>
+        <p class="hint">Compare come testo informativo alla fine del menu del cliente — utile per supplementi, allergeni o altre indicazioni che non sono piatti veri e propri.</p></div>
+        <div class="field"><label>Stesse note in inglese (facoltativo)</label><textarea id="d-menunotes-en" rows="3" placeholder="Extra toppings available on request...">${d.menuNotesEn||''}</textarea></div>
       </div>
       <button class="btn btn-primary btn-block" id="d-save">${isNew ? 'Crea locale' : 'Salva modifiche'}</button>
       ${!isNew ? `<button class="btn btn-ghost btn-block" id="d-showlink" style="margin-top:10px;">Vedi link e QR</button>` : ''}
@@ -1783,6 +1816,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#d-plan').onchange = e => d.plan = e.target.value;
       wrap.querySelector('#d-plustrial').oninput = e => d.plusTrialUntil = e.target.value;
       wrap.querySelector('#d-review').oninput = e => d.googleReviewLink = e.target.value.trim();
+      wrap.querySelector('#d-menunotes').oninput = e => d.menuNotes = e.target.value;
+      wrap.querySelector('#d-menunotes-en').oninput = e => d.menuNotesEn = e.target.value;
       wrap.querySelector('#d-logo').onchange = (e)=>{
         const file = e.target.files[0];
         if(!file) return;
@@ -1871,7 +1906,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         slug = d.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + uid('').toLowerCase();
       }
       const pinHash = await sha256(d.pin.trim());
-      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations:d.categoryTranslations||{} };
+      const tenant = { slug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, pinHash, slots:d.slots, menu:d.menu||[], closedDates:[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations:d.categoryTranslations||{}, menuNotes:d.menuNotes||'', menuNotesEn:d.menuNotesEn||'' };
       tenants.push(tenant);
       await sSet('tenant:'+slug, tenant);
       await sSet('orders:'+slug, []);
@@ -1894,7 +1929,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         if(!confirm('Il link e il QR attuali smetteranno di funzionare. Continuare?')) return;
         finalSlug = newSlug;
       }
-      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations: d.categoryTranslations || existing.categoryTranslations || {} };
+      const updated = { ...existing, slug: finalSlug, name:d.name.trim(), emoji:d.emoji||'', accent:d.accent, slots:d.slots, menu:d.menu||[], groupSlug:d.groupSlug||'', plan:d.plan||'base', plusTrialUntil:d.plusTrialUntil||'', logoDataUrl:d.logoDataUrl||'', googleReviewLink:d.googleReviewLink||'', categoryTranslations: d.categoryTranslations || existing.categoryTranslations || {}, menuNotes:d.menuNotes||'', menuNotesEn:d.menuNotesEn||'' };
       if(d.pin && d.pin.trim()){ updated.pinHash = await sha256(d.pin.trim()); }
       if(wantsRename){
         const oldOrders = await loadOrders(existing.slug);
