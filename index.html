@@ -85,6 +85,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 .status-rejected{background:#3d221e;color:var(--tomato-bright);}
 .status-ready{background:#1e3140;color:#7ec3e0;}
 .status-proposed{background:#2e2140;color:#c9a8e0;}
+.status-ritirato{background:#2a2a2a;color:#9a9a9a;}
 .propose-area{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
 .propose-area .ph{font-size:12.5px;color:var(--muted);margin-bottom:8px;}
 .order-card{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px;background:var(--bg-panel-2);}
@@ -144,7 +145,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08i</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08j</div>
 <script>
 (function(){
   "use strict";
@@ -291,7 +292,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 
   let state = {
     view: 'boot', tenants: [], activeSlug: null, activeTenant: null,
-    cart: {}, selectedDayOffset: 0, selectedSlot: null, expandedCategories: {},
+    cart: {}, selectedDayOffset: 0, selectedSlot: null, expandedCategories: {}, showArchivedOrders: false,
     customerName: '', customerPhone: '', orderNote: '',
     loginSlugInput: '', loginPinInput: '', loginError: '',
     adminConfigExists: false, adminPassInput: '', adminPassInput2: '', adminError: '',
@@ -881,13 +882,25 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         content.querySelector('#menu-view-toggle').onclick = ()=> toggleMenuView(content, t);
       },0);
       const ordersArea = content.querySelector('#orders-area');
-      const orders = await loadOrders(t.slug);
-      orders.sort((a,b)=> b.createdAt - a.createdAt);
+      const allOrders = await loadOrders(t.slug);
+      allOrders.sort((a,b)=> b.createdAt - a.createdAt);
+      const archivedCount = allOrders.filter(o=>o.archived).length;
+      const showArchived = !!state.showArchivedOrders;
+      const orders = showArchived ? allOrders : allOrders.filter(o=>!o.archived);
       ordersArea.innerHTML = '';
       const pending = orders.filter(o=>o.status==='pending');
       const others = orders.filter(o=>o.status!=='pending');
+      const readyToArchive = allOrders.filter(o=>o.status==='ritirato' && !o.archived);
       if(orders.length===0){
-        ordersArea.innerHTML = `<div class="empty"><div class="big">📭</div>Nessun ordine ancora.</div>`;
+        ordersArea.innerHTML = `<div class="empty"><div class="big">📭</div>${archivedCount>0 && !showArchived ? 'Nessun ordine attivo — hai solo ordini archiviati.' : 'Nessun ordine ancora.'}</div>`;
+        if(archivedCount > 0 && !showArchived){
+          const toggleLink = document.createElement('p');
+          toggleLink.className = 'small-note';
+          toggleLink.style.cssText = 'text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline;';
+          toggleLink.textContent = `Mostra ordini archiviati (${archivedCount})`;
+          toggleLink.onclick = ()=>{ state.showArchivedOrders = true; render(); };
+          ordersArea.appendChild(toggleLink);
+        }
       } else {
         if(pending.length){
           const h = document.createElement('h3'); h.style.cssText='margin-bottom:10px;font-size:15px;'; h.textContent = `Da confermare (${pending.length})`;
@@ -895,9 +908,26 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
           pending.forEach(o=> ordersArea.appendChild(orderCard(o, t)));
         }
         if(others.length){
-          const h2 = document.createElement('h3'); h2.style.cssText='margin:18px 0 10px;font-size:15px;'; h2.textContent = 'Storico';
-          ordersArea.appendChild(h2);
+          const h2row = document.createElement('div'); h2row.style.cssText='display:flex;justify-content:space-between;align-items:center;margin:18px 0 10px;';
+          h2row.innerHTML = `<h3 style="margin:0;font-size:15px;">Storico</h3>`;
+          if(readyToArchive.length){
+            const archBtn = document.createElement('button'); archBtn.className='btn btn-ghost btn-sm'; archBtn.textContent = `🗄️ Archivia ritirati (${readyToArchive.length})`;
+            archBtn.onclick = async ()=>{
+              for(const o of readyToArchive){ const fresh = await sGet('orderitem:'+t.slug+':'+o.id); if(fresh){ fresh.archived = true; await saveOrderItem(t.slug, fresh); } }
+              toast('Ordini archiviati'); render();
+            };
+            h2row.appendChild(archBtn);
+          }
+          ordersArea.appendChild(h2row);
           others.forEach(o=> ordersArea.appendChild(orderCard(o, t)));
+        }
+        if(archivedCount > 0){
+          const toggleLink = document.createElement('p');
+          toggleLink.className = 'small-note';
+          toggleLink.style.cssText = 'text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline;';
+          toggleLink.textContent = showArchived ? 'Nascondi ordini archiviati' : `Mostra ordini archiviati (${archivedCount})`;
+          toggleLink.onclick = ()=>{ state.showArchivedOrders = !showArchived; render(); };
+          ordersArea.appendChild(toggleLink);
         }
       }
     }
@@ -1206,7 +1236,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     return div;
   }
 
-  function statusLabel(s){ return {pending:'In attesa', confirmed:'Confermato', rejected:'Rifiutato', ready:'Pronto', proposed:'In attesa del cliente'}[s] || s; }
+  function statusLabel(s){ return {pending:'In attesa', confirmed:'Confermato', rejected:'Rifiutato', ready:'Pronto', proposed:'In attesa del cliente', ritirato:'Ritirato'}[s] || s; }
 
   function orderCard(o, t){
     const div = document.createElement('div'); div.className = 'order-card';
@@ -1238,6 +1268,9 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     } else if(o.status==='confirmed'){
       const rdy = document.createElement('button'); rdy.className='btn btn-ghost btn-sm'; rdy.textContent='Segna come pronto'; rdy.onclick=()=>updateOrderStatus(t.slug,o.id,'ready');
       actions.appendChild(rdy);
+    } else if(o.status==='ready'){
+      const pickedUp = document.createElement('button'); pickedUp.className='btn btn-confirm btn-sm'; pickedUp.textContent='✅ Ritirato'; pickedUp.onclick=()=>updateOrderStatus(t.slug,o.id,'ritirato');
+      actions.appendChild(pickedUp);
     }
     const printBtn = document.createElement('button'); printBtn.className='btn btn-ghost btn-sm'; printBtn.textContent='🖨️'; printBtn.title='Stampa comanda'; printBtn.onclick=()=>printOrder(o,t);
     actions.appendChild(printBtn);
@@ -1714,6 +1747,31 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     reader.readAsBinaryString(file);
   }
 
+  async function toggleAdminOrdersView(wrap, slug){
+    const area = wrap.querySelector('#admin-orders-view');
+    const isOpen = area.style.display !== 'none';
+    if(isOpen){ area.style.display='none'; return; }
+    area.style.display='block';
+    area.innerHTML = '<div class="spinner"></div>';
+    const orders = await loadOrders(slug);
+    orders.sort((a,b)=> b.createdAt - a.createdAt);
+    if(orders.length===0){ area.innerHTML = '<p class="small-note">Nessun ordine per questo locale.</p>'; return; }
+    area.innerHTML = `<p class="small-note" style="margin-bottom:10px;">Qui puoi eliminare ordini di prova prima che il locale veda lo storico — l'eliminazione è definitiva.</p>`;
+    orders.forEach(o=>{
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);gap:10px;';
+      row.innerHTML = `<div style="font-size:13px;"><b>${o.customerName}</b> · ${dayLabelFromDate(o.date)} ${o.time} · <span style="color:var(--muted);">${statusLabel(o.status)}</span></div>`;
+      const delBtn = document.createElement('button'); delBtn.className='btn btn-danger btn-sm'; delBtn.textContent='🗑️';
+      delBtn.onclick = async ()=>{
+        if(!confirm(`Eliminare definitivamente l'ordine di "${o.customerName}"?`)) return;
+        const ok = await sDelete('orderitem:'+slug+':'+o.id);
+        if(ok){ toast('Ordine eliminato'); row.remove(); } else toast('Errore, riprova.');
+      };
+      row.appendChild(delBtn);
+      area.appendChild(row);
+    });
+  }
+
   function viewAdminTenantForm(){
     const isNew = !state.adminEditingSlug;
     const d = state.adminDraft;
@@ -1785,7 +1843,9 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div class="field"><label>Stesse note in inglese (facoltativo)</label><textarea id="d-menunotes-en" rows="3" placeholder="Extra toppings available on request...">${d.menuNotesEn||''}</textarea></div>
       </div>
       <button class="btn btn-primary btn-block" id="d-save">${isNew ? 'Crea locale' : 'Salva modifiche'}</button>
-      ${!isNew ? `<button class="btn btn-ghost btn-block" id="d-showlink" style="margin-top:10px;">Vedi link e QR</button>` : ''}
+      ${!isNew ? `<button class="btn btn-ghost btn-block" id="d-showlink" style="margin-top:10px;">Vedi link e QR</button>
+      <button class="btn btn-ghost btn-block" id="d-showorders" style="margin-top:10px;">🗑️ Gestisci storico ordini</button>
+      <div id="admin-orders-view" style="display:none;margin-top:10px;"></div>` : ''}
     `;
 
     const chipRow = wrap.querySelector('#chip-row');
@@ -1928,6 +1988,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       wrap.querySelector('#d-save').onclick = saveTenantDraft;
       const linkBtn = wrap.querySelector('#d-showlink');
       if(linkBtn) linkBtn.onclick = ()=> setState({view:'adminTenantLink'});
+      const ordersBtn = wrap.querySelector('#d-showorders');
+      if(ordersBtn) ordersBtn.onclick = ()=> toggleAdminOrdersView(wrap, d.slug || state.adminEditingSlug);
     },0);
     return wrap;
   }
