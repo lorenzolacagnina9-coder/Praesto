@@ -145,7 +145,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08j</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08l</div>
 <script>
 (function(){
   "use strict";
@@ -511,6 +511,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       sumCard.innerHTML = `<h3 style="margin-bottom:10px;">Riepilogo</h3>`;
       sumCard.appendChild(ticket);
       const submitBtn = document.createElement('button');
+      submitBtn.id = 'submit-order-btn';
       submitBtn.className = 'btn btn-primary btn-block'; submitBtn.style.marginTop = '16px';
       submitBtn.textContent = 'Proponi ordine al locale';
       submitBtn.disabled = !state.selectedSlot || !state.customerName || !state.customerPhone;
@@ -550,8 +551,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     setTimeout(()=>{
       const nameEl = document.getElementById('cust-name'), phoneEl = document.getElementById('cust-phone'), noteEl = document.getElementById('cust-note');
       const refreshSubmitState = ()=>{
-        const btn = wrap.querySelector('.card button.btn-primary');
-        if(btn && btn.textContent.includes('Proponi ordine')) btn.disabled = !state.selectedSlot || !state.customerName || !state.customerPhone;
+        const btn = document.getElementById('submit-order-btn');
+        if(btn) btn.disabled = !state.selectedSlot || !state.customerName || !state.customerPhone;
       };
       if(nameEl) nameEl.oninput = e => { state.customerName = e.target.value; refreshSubmitState(); };
       if(phoneEl) phoneEl.oninput = e => { state.customerPhone = e.target.value; refreshSubmitState(); };
@@ -579,7 +580,16 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       btn.className = 'slot' + (full ? ' full' : '') + ((state.selectedSlot && state.selectedSlot.date===date && state.selectedSlot.time===time) ? ' selected' : '');
       btn.innerHTML = `${time}<span class="cap">${slotBlocked ? 'chiuso' : (full ? 'pieno' : remaining+' post.')}</span>`;
       btn.disabled = full;
-      btn.onclick = ()=> setState({selectedSlot:{date, time}});
+      btn.onclick = ()=>{
+        // aggiornamento leggero, senza ricostruire tutta la pagina: eviterebbe di
+        // far tornare lo schermo in cima, dando l'impressione che il tocco non sia
+        // stato registrato (il cliente riprova pensando sia un bug)
+        state.selectedSlot = {date, time};
+        container.querySelectorAll('.slot').forEach(s=> s.classList.remove('selected'));
+        btn.classList.add('selected');
+        const submitBtn = document.getElementById('submit-order-btn');
+        if(submitBtn) submitBtn.disabled = !state.selectedSlot || !state.customerName || !state.customerPhone;
+      };
       container.appendChild(btn);
     });
   }
@@ -769,7 +779,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
       <h2 style="margin-bottom:6px;">Pannello ordini</h2>
       <p class="small-note" style="margin-bottom:18px;">Inserisci il codice del tuo locale e il PIN ricevuti dal gestore.</p>
       <div class="card">
-        <div class="field"><label>Codice locale</label><input id="in-slug" value="${state.loginSlugInput}" placeholder="es. da-turi-4f2a1"></div>
+        <div class="field"><label>Codice locale</label><input id="in-slug" value="${state.loginSlugInput}" placeholder="es. Locale-123"></div>
         <div class="field"><label>PIN</label><input id="in-pin" type="password" inputmode="numeric" value="${state.loginPinInput}" placeholder="••••"></div>
         <button class="btn btn-primary btn-block" id="do-login">Accedi</button>
         ${state.loginError ? `<p class="small-note" style="color:var(--tomato-bright);">${state.loginError}</p>` : ''}
@@ -2164,7 +2174,21 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     root.innerHTML = ''; root.appendChild(el);
   }
 
-  boot();
+  // Controllo di sicurezza: se l'app è aperta da un file locale (es. scaricato ed
+  // aperto direttamente sul telefono) invece che dal sito pubblicato, niente può
+  // funzionare correttamente — link, QR e copia negli appunti sarebbero tutti sbagliati.
+  // Meglio bloccare subito con un avviso chiaro che lasciare usare l'app in quello stato.
+  if(location.protocol !== 'http:' && location.protocol !== 'https:'){
+    root.innerHTML = `<div class="card" style="text-align:center;padding:40px 22px;">
+      <div style="font-size:38px;margin-bottom:10px;">⚠️</div>
+      <h2 style="margin-bottom:10px;">Questo file è aperto nel modo sbagliato</h2>
+      <p style="color:var(--muted);font-size:14.5px;line-height:1.6;margin-bottom:16px;">Stai aprendo un file locale sul dispositivo, non il sito pubblicato. In questa modalità i link e i QR generati non funzionerebbero per i clienti.</p>
+      <p style="font-size:14.5px;">Apri invece:</p>
+      <p style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent,var(--crust));margin:8px 0 0;word-break:break-all;">https://programsupport14.github.io/Praesto/</p>
+    </div>`;
+  } else {
+    boot();
+  }
 })();
 </script>
 </body>
