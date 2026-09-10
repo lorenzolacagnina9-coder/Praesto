@@ -144,7 +144,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
 </head>
 <body>
 <div id="root" class="app"></div>
-<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08f</div>
+<div id="app-version" style="position:fixed;bottom:6px;right:10px;font-size:10px;color:#a99a84;opacity:0.6;font-family:sans-serif;z-index:999;pointer-events:none;">v2026-09-08i</div>
 <script>
 (function(){
   "use strict";
@@ -479,6 +479,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     [0,1,2].forEach(off=>{
       const b = document.createElement('button');
       b.className = 'btn ' + (state.selectedDayOffset===off ? 'btn-primary' : 'btn-ghost');
+      b.style.cssText = 'flex:1;padding-left:8px;padding-right:8px;white-space:nowrap;';
       b.textContent = dayLabel(off);
       b.onclick = ()=> setState({selectedDayOffset:off, selectedSlot:null});
       dayRow.appendChild(b);
@@ -868,6 +869,8 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         <div id="phone-order-form" style="display:none;"></div>
         <button class="btn btn-ghost btn-block" id="qr-toggle" style="margin-bottom:18px;">📱 Link e QR del locale</button>
         <div id="qr-form" style="display:none;"></div>
+        <button class="btn btn-ghost btn-block" id="menu-view-toggle" style="margin-bottom:18px;">📋 Il tuo menu</button>
+        <div id="menu-view-form" style="display:none;"></div>
         <div id="orders-area"><div class="spinner"></div></div>`;
       setTimeout(()=>{
         content.querySelector('#today-switch').onclick = ()=> toggleClosedToday(t);
@@ -875,6 +878,7 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
         content.querySelector('#period-toggle').onclick = ()=> togglePeriodForm(content, t);
         content.querySelector('#hours-toggle').onclick = ()=> toggleHoursForm(content, t);
         content.querySelector('#qr-toggle').onclick = ()=> toggleQrForm(content, t);
+        content.querySelector('#menu-view-toggle').onclick = ()=> toggleMenuView(content, t);
       },0);
       const ordersArea = content.querySelector('#orders-area');
       const orders = await loadOrders(t.slug);
@@ -1297,6 +1301,41 @@ h1,h2,h3{font-family:'Fraunces', serif;margin:0;font-weight:700;letter-spacing:-
     const ok = await sSet('tenant:'+cur.slug, cur);
     if(ok){ toast(closedDates.has(today) ? 'Ordini sospesi per oggi' : 'Ordini riattivati per oggi'); setState({activeTenant:cur}); }
     else toast('Errore, riprova.');
+  }
+
+  function toggleMenuView(wrap, t){
+    const area = wrap.querySelector('#menu-view-form');
+    const isOpen = area.style.display !== 'none';
+    if(isOpen){ area.style.display='none'; return; }
+    area.style.display='block';
+    const menu = t.menu||[];
+    let html = `<div class="card"><h3 style="margin-bottom:12px;font-size:15px;">Il tuo menu</h3>`;
+    if(menu.length===0){
+      html += `<p class="small-note">Nessun piatto configurato ancora.</p>`;
+    } else {
+      const cats = [];
+      menu.forEach(item=>{ const c = item.category||'Altro'; if(!cats.includes(c)) cats.push(c); });
+      const renderedGroups = new Set();
+      cats.forEach(cat=>{
+        if(cats.length > 1 || cat !== 'Altro'){
+          html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;margin:14px 0 4px;">${cat}</div>`;
+        }
+        menu.forEach(item=>{
+          if((item.category||'Altro') !== cat) return;
+          if(item.variantGroup){
+            if(renderedGroups.has(item.variantGroup)) return;
+            renderedGroups.add(item.variantGroup);
+            const variants = menu.filter(x=>x.variantGroup===item.variantGroup);
+            const priceLabels = variants.map(v=>`${v.variantLabel}: € ${Number(v.price).toFixed(2)}`).join(' · ');
+            html += `<div class="menu-item"><div><div class="mi-name">${item.groupName||item.name}</div>${item.desc ? `<div class="mi-price" style="color:var(--parchment-dim);">${item.desc}</div>` : ''}<div class="mi-price">${priceLabels}</div></div></div>`;
+          } else {
+            html += `<div class="menu-item"><div><div class="mi-name">${item.name}</div>${item.desc ? `<div class="mi-price" style="color:var(--parchment-dim);">${item.desc}</div>` : ''}<div class="mi-price">€ ${Number(item.price).toFixed(2)}</div></div></div>`;
+          }
+        });
+      });
+    }
+    html += `</div>`;
+    area.innerHTML = html;
   }
 
   function toggleQrForm(wrap, t){
